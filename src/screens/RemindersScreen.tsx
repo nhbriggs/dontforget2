@@ -72,8 +72,11 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
-  const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+
+  // Define filter type and state
+  type FilterType = null | 'assigned-by-parent' | 'assigned-by-me' | string;
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>(null);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -126,65 +129,142 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       const remindersRef = collection(db, 'reminders');
       let q;
 
-      if (user.familyId) {
-        // If user has a familyId, get reminders for that family
-        q = query(
+      if (user.role === 'parent' && user.familyId) {
+        // If user is a parent, get reminders that are either:
+        // 1. Created by children in the family, or
+        // 2. Assigned to children in the family
+        const familyRef = doc(db, 'families', user.familyId);
+        const familySnapshot = await getDoc(familyRef);
+        const familyData = familySnapshot.data();
+        const childrenIds = familyData?.childrenIds || [];
+
+        // We need to make two separate queries since Firestore doesn't support OR conditions
+        const createdByChildrenQuery = query(
           remindersRef,
           where('familyId', '==', user.familyId),
+          where('createdBy', 'in', childrenIds),
           orderBy('createdAt', 'desc')
         );
+
+        const assignedToChildrenQuery = query(
+          remindersRef,
+          where('familyId', '==', user.familyId),
+          where('assignedTo', 'in', childrenIds),
+          orderBy('createdAt', 'desc')
+        );
+
+        // Execute both queries
+        const [createdBySnapshot, assignedToSnapshot] = await Promise.all([
+          getDocs(createdByChildrenQuery),
+          getDocs(assignedToChildrenQuery)
+        ]);
+
+        // Combine results, removing duplicates
+        const seenIds = new Set();
+        const loadedReminders: Reminder[] = [];
+        const assigneeIds = new Set<string>();
+
+        const processSnapshot = (snapshot: any) => {
+          snapshot.forEach((doc: any) => {
+            if (!seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              const data = doc.data() as DocumentData;
+              assigneeIds.add(data.assignedTo);
+              loadedReminders.push({
+                id: doc.id,
+                title: data.title,
+                status: data.status,
+                createdAt: data.createdAt.toDate(),
+                assignedTo: data.assignedTo,
+                familyId: data.familyId,
+                dueDate: data.dueDate.toDate(),
+                isRecurring: data.isRecurring || false,
+                recurrenceConfig: data.recurrenceConfig ? {
+                  selectedDays: data.recurrenceConfig.selectedDays,
+                  weekFrequency: data.recurrenceConfig.weekFrequency,
+                  startDate: data.recurrenceConfig.startDate.toDate(),
+                  lastGenerated: data.recurrenceConfig.lastGenerated.toDate(),
+                } : null,
+                checklist: data.checklist || [],
+                createdBy: data.createdBy,
+              });
+            }
+          });
+        };
+
+        processSnapshot(createdBySnapshot);
+        processSnapshot(assignedToSnapshot);
+
+        // Sort combined results by createdAt
+        loadedReminders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        // Load assignee names
+        const names: Record<string, string> = {};
+        for (const assigneeId of assigneeIds) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', assigneeId));
+            if (userDoc.exists()) {
+              names[assigneeId] = userDoc.data().displayName || 'Unknown';
+            }
+          } catch (error) {
+            console.error('Error loading assignee name:', error);
+          }
+        }
+        
+        setAssigneeNames(names);
+        setReminders(loadedReminders);
       } else {
-        // If no familyId, get reminders assigned to this user
+        // If user is a child or has no familyId, get only their reminders
         q = query(
           remindersRef,
           where('assignedTo', '==', user.id),
           orderBy('createdAt', 'desc')
         );
-      }
 
-      const querySnapshot = await getDocs(q);
-      
-      const loadedReminders: Reminder[] = [];
-      const assigneeIds = new Set<string>();
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as DocumentData;
-        assigneeIds.add(data.assignedTo);
-        loadedReminders.push({
-          id: doc.id,
-          title: data.title,
-          status: data.status,
-          createdAt: data.createdAt.toDate(),
-          assignedTo: data.assignedTo,
-          familyId: data.familyId,
-          dueDate: data.dueDate.toDate(),
-          isRecurring: data.isRecurring || false,
-          recurrenceConfig: data.recurrenceConfig ? {
-            selectedDays: data.recurrenceConfig.selectedDays,
-            weekFrequency: data.recurrenceConfig.weekFrequency,
-            startDate: data.recurrenceConfig.startDate.toDate(),
-            lastGenerated: data.recurrenceConfig.lastGenerated.toDate(),
-          } : null,
-          checklist: data.checklist || [],
-          createdBy: data.createdBy,
+        const querySnapshot = await getDocs(q);
+        
+        const loadedReminders: Reminder[] = [];
+        const assigneeIds = new Set<string>();
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data() as DocumentData;
+          assigneeIds.add(data.assignedTo);
+          loadedReminders.push({
+            id: doc.id,
+            title: data.title,
+            status: data.status,
+            createdAt: data.createdAt.toDate(),
+            assignedTo: data.assignedTo,
+            familyId: data.familyId,
+            dueDate: data.dueDate.toDate(),
+            isRecurring: data.isRecurring || false,
+            recurrenceConfig: data.recurrenceConfig ? {
+              selectedDays: data.recurrenceConfig.selectedDays,
+              weekFrequency: data.recurrenceConfig.weekFrequency,
+              startDate: data.recurrenceConfig.startDate.toDate(),
+              lastGenerated: data.recurrenceConfig.lastGenerated.toDate(),
+            } : null,
+            checklist: data.checklist || [],
+            createdBy: data.createdBy,
+          });
         });
-      });
 
-      // Load assignee names
-      const names: Record<string, string> = {};
-      for (const assigneeId of assigneeIds) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', assigneeId));
-          if (userDoc.exists()) {
-            names[assigneeId] = userDoc.data().displayName || 'Unknown';
+        // Load assignee names
+        const names: Record<string, string> = {};
+        for (const assigneeId of assigneeIds) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', assigneeId));
+            if (userDoc.exists()) {
+              names[assigneeId] = userDoc.data().displayName || 'Unknown';
+            }
+          } catch (error) {
+            console.error('Error loading assignee name:', error);
           }
-        } catch (error) {
-          console.error('Error loading assignee name:', error);
         }
+        
+        setAssigneeNames(names);
+        setReminders(loadedReminders);
       }
-      
-      setAssigneeNames(names);
-      setReminders(loadedReminders);
     } catch (error) {
       console.error('Error loading reminders:', error);
       setError('Failed to load reminders. Please try again.');
@@ -218,9 +298,26 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     }
   };
 
-  const filteredReminders = selectedFilter
-    ? reminders.filter(reminder => reminder.assignedTo === selectedFilter)
-    : reminders;
+  const filteredReminders = React.useMemo(() => {
+    if (!selectedFilter) {
+      return reminders;
+    }
+
+    if (selectedFilter === 'assigned-by-parent') {
+      return reminders.filter(reminder => 
+        reminder.assignedTo === user?.id && reminder.createdBy !== user?.id
+      );
+    }
+
+    if (selectedFilter === 'assigned-by-me') {
+      return reminders.filter(reminder => 
+        reminder.createdBy === user?.id
+      );
+    }
+
+    // For parent users, filter by assignedTo
+    return reminders.filter(reminder => reminder.assignedTo === selectedFilter);
+  }, [selectedFilter, reminders, user]);
 
   if (loading) {
     return (
@@ -256,21 +353,53 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                 selectedFilter === null && styles.filterPillTextSelected
               ]}>All</Text>
             </TouchableOpacity>
-            {familyMembers.map(member => (
-              <TouchableOpacity
-                key={member.id}
-                style={[
-                  styles.filterPill,
-                  selectedFilter === member.id && styles.filterPillSelected
-                ]}
-                onPress={() => setSelectedFilter(member.id)}
-              >
-                <Text style={[
-                  styles.filterPillText,
-                  selectedFilter === member.id && styles.filterPillTextSelected
-                ]}>{member.displayName}</Text>
-              </TouchableOpacity>
-            ))}
+
+            {user?.role === 'child' ? (
+              // Child user filters
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.filterPill,
+                    selectedFilter === 'assigned-by-parent' && styles.filterPillSelected
+                  ]}
+                  onPress={() => setSelectedFilter('assigned-by-parent')}
+                >
+                  <Text style={[
+                    styles.filterPillText,
+                    selectedFilter === 'assigned-by-parent' && styles.filterPillTextSelected
+                  ]}>by Parent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.filterPill,
+                    selectedFilter === 'assigned-by-me' && styles.filterPillSelected
+                  ]}
+                  onPress={() => setSelectedFilter('assigned-by-me')}
+                >
+                  <Text style={[
+                    styles.filterPillText,
+                    selectedFilter === 'assigned-by-me' && styles.filterPillTextSelected
+                  ]}>by Me</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              // Parent user filters - show all family members
+              familyMembers.map(member => (
+                <TouchableOpacity
+                  key={member.id}
+                  style={[
+                    styles.filterPill,
+                    selectedFilter === member.id && styles.filterPillSelected
+                  ]}
+                  onPress={() => setSelectedFilter(member.id)}
+                >
+                  <Text style={[
+                    styles.filterPillText,
+                    selectedFilter === member.id && styles.filterPillTextSelected
+                  ]}>{member.displayName}</Text>
+                </TouchableOpacity>
+              ))
+            )}
           </ScrollView>
         )}
       </View>
@@ -301,7 +430,10 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() => navigation.navigate('EditReminder', { reminderId: item.id })}
+              onPress={() => navigation.navigate('EditReminder', { 
+                reminderId: item.id,
+                canEdit: user?.id === item.createdBy
+              })}
               style={styles.reminderItem}
             >
               <View style={styles.reminderContent}>
@@ -309,7 +441,13 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                 <View style={styles.reminderField}>
                   <MaterialCommunityIcons name="account-circle" size={16} color="#666" />
                   <Text style={styles.reminderAssignee}>
-                    {' Assigned to: '}{assigneeNames[item.assignedTo] || 'Loading...'}
+                    {' '}{assigneeNames[item.assignedTo] || 'Loading...'}
+                  </Text>
+                </View>
+                <View style={styles.reminderField}>
+                  <MaterialCommunityIcons name="account" size={16} color="#666" />
+                  <Text style={styles.reminderCreator}>
+                    {' '}Created by: {item.createdBy === user?.id ? 'Me' : assigneeNames[item.createdBy] || 'Unknown'}
                   </Text>
                 </View>
                 <View style={styles.reminderField}>
@@ -318,14 +456,14 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                     styles.reminderDueDate,
                     new Date() > item.dueDate && styles.reminderOverdue
                   ]}>
-                    {' Due: '}{formatDueDate(item.dueDate)}
+                    {' '}{formatDueDate(item.dueDate)}
                   </Text>
                 </View>
                 {item.isRecurring && item.recurrenceConfig && (
                   <View style={styles.reminderField}>
                     <MaterialCommunityIcons name="refresh" size={16} color="#007AFF" />
                     <Text style={styles.nextOccurrence}>
-                      {' Next occurrence: '}{formatDueDate(getNextOccurrence(
+                      {' '}{formatDueDate(getNextOccurrence(
                         item.recurrenceConfig.startDate,
                         item.recurrenceConfig.selectedDays,
                         item.recurrenceConfig.weekFrequency
@@ -346,16 +484,43 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                     item.status === 'completed' && styles.statusCompleted,
                     item.status === 'verified' && styles.statusVerified
                   ]}>
-                    {' Status: '}{item.status}
+                    {' '}{item.status}
                   </Text>
                 </View>
+                {item.checklist && item.checklist.length > 0 && (
+                  <View style={styles.checklistContainer}>
+                    {item.checklist.slice(0, 3).map((checkItem, index) => (
+                      <View key={index} style={styles.checklistItem}>
+                        <MaterialCommunityIcons 
+                          name={checkItem.completed ? "checkbox-marked-outline" : "checkbox-blank-outline"} 
+                          size={16} 
+                          color={checkItem.completed ? "#34c759" : "#666"} 
+                        />
+                        <Text style={[
+                          styles.checklistText,
+                          checkItem.completed && styles.checklistCompleted
+                        ]}>
+                          {' '}{checkItem.text}
+                        </Text>
+                      </View>
+                    ))}
+                    {item.checklist.length > 3 && (
+                      <Text style={styles.moreItems}>
+                        {`... and ${item.checklist.length - 3} more items`}
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
-              <TouchableOpacity
-                onPress={() => handleDeleteReminder(item.id)}
-                style={styles.deleteButton}
-              >
-                <MaterialCommunityIcons name="trash-can-outline" size={22} color="#ff3b30" />
-              </TouchableOpacity>
+              {/* Only show delete button if user created the reminder */}
+              {user?.id === item.createdBy && (
+                <TouchableOpacity
+                  onPress={() => handleDeleteReminder(item.id)}
+                  style={styles.deleteButton}
+                >
+                  <MaterialCommunityIcons name="trash-can-outline" size={22} color="#ff3b30" />
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
           )}
         />
@@ -553,5 +718,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  checklistContainer: {
+    marginVertical: 4,
+    marginLeft: 4,
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  checklistText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  checklistCompleted: {
+    color: '#666',
+    textDecorationLine: 'line-through',
+  },
+  moreItems: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 2,
+    marginLeft: 24,
+  },
+  reminderCreator: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
 }); 
