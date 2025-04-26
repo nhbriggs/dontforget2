@@ -146,6 +146,20 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
     }
 
     try {
+      // If user is a child, they can only assign to themselves
+      if (user.role === 'child') {
+        console.log('DEBUG: User is a child, setting self as only assignee');
+        const members: FamilyMember[] = [{
+          id: user.id,
+          displayName: user.displayName || 'Me',
+          email: user.email || '',
+          role: 'child' as const
+        }];
+        setFamilyMembers(members);
+        setAssignedTo(user.id);
+        return;
+      }
+
       // Get the family document directly using the familyId
       console.log('DEBUG: Fetching family document with ID:', user.familyId);
       const familyRef = doc(db, 'families', user.familyId);
@@ -162,11 +176,6 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
       // Get children IDs from the array
       const childrenIds = familyData.childrenIds || [];
       console.log('DEBUG: Found childrenIds:', childrenIds);
-
-      if (childrenIds.length === 0) {
-        console.log('DEBUG: No children IDs found in family');
-        return;
-      }
 
       // Now get the user documents for each child
       const members: FamilyMember[] = [];
@@ -193,11 +202,9 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
 
       console.log('DEBUG: Final members list:', members);
       setFamilyMembers(members);
-      if (members.length > 0) {
+      if (members.length > 0 && !assignedTo) {
         setAssignedTo(members[0].id);
         console.log('DEBUG: Set assignedTo to first member:', members[0].id);
-      } else {
-        console.log('DEBUG: No members found to assign to');
       }
     } catch (error) {
       console.error('DEBUG: Error loading family members:', error);
@@ -302,7 +309,9 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           {familyMembers.length === 0 ? (
             <View style={styles.noChildrenContainer}>
               <Text style={styles.noChildrenText}>
-                No children found in your family. Please add children to your family first.
+                {user?.role === 'parent' 
+                  ? 'No children found in your family. Please add children to your family first.'
+                  : 'Unable to load assignee information.'}
               </Text>
             </View>
           ) : (
@@ -316,17 +325,22 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
                   key={member.id}
                   style={[
                     styles.assigneePill,
-                    assignedTo === member.id && styles.assigneePillSelected
+                    assignedTo === member.id && styles.assigneePillSelected,
+                    user?.role === 'child' && styles.disabledPill
                   ]}
-                  onPress={() => setAssignedTo(member.id)}
+                  onPress={() => user?.role === 'parent' && setAssignedTo(member.id)}
+                  disabled={user?.role === 'child'}
                 >
                   <Text 
                     style={[
                       styles.assigneePillText,
-                      assignedTo === member.id && styles.assigneePillTextSelected
+                      assignedTo === member.id && styles.assigneePillTextSelected,
+                      user?.role === 'child' && styles.disabledText
                     ]}
                   >
-                    {member.displayName}
+                    {user?.role === 'child' && member.id === user.id 
+                      ? 'Me'
+                      : member.displayName}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -732,5 +746,12 @@ const styles = StyleSheet.create({
   weekFrequencyText: {
     fontSize: 16,
     color: '#333',
+  },
+  disabledPill: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#ddd',
+  },
+  disabledText: {
+    color: '#666',
   },
 }); 

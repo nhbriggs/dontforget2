@@ -18,6 +18,7 @@ import { db } from '../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ChecklistItem } from '../types/Reminder';
 import { Picker } from '@react-native-picker/picker';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface FamilyMember {
   id: string;
@@ -76,8 +77,8 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
   return nextDate; // Fallback, should rarely happen
 };
 
-export default function EditReminderScreen({ route, navigation }: EditReminderScreenProps) {
-  const { reminderId } = route.params;
+const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigation }) => {
+  const { reminderId, canEdit } = route.params;
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -121,6 +122,20 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
     if (!user?.familyId) return;
 
     try {
+      // If user is a child, they can only assign to themselves
+      if (user.role === 'child') {
+        setFamilyMembers([{
+          id: user.id,
+          displayName: user.displayName || 'Me',
+          email: user.email || '',
+          role: 'child'
+        }]);
+        // Auto-assign to themselves
+        setAssignedTo(user.id);
+        return;
+      }
+
+      // For parents, load all children as before
       const familyRef = doc(db, 'families', user.familyId);
       const familySnapshot = await getDoc(familyRef);
 
@@ -221,6 +236,82 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
     }
   };
 
+  if (!canEdit) {
+    return (
+      <ScrollView style={styles.readOnlyContainer}>
+        <View style={styles.readOnlyCard}>
+          <Text style={styles.readOnlyTitle}>{title}</Text>
+          
+          <View style={styles.readOnlyRow}>
+            <MaterialCommunityIcons name="account" size={24} color="#666" style={styles.readOnlyIcon} />
+            <View>
+              <Text style={styles.readOnlyLabel}>Assigned to</Text>
+              <Text style={styles.readOnlyText}>{familyMembers.find(m => m.id === assignedTo)?.displayName || 'Not assigned'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.readOnlyRow}>
+            <MaterialCommunityIcons name="calendar" size={24} color="#666" style={styles.readOnlyIcon} />
+            <View>
+              <Text style={styles.readOnlyLabel}>Due Date</Text>
+              <Text style={styles.readOnlyText}>{dueDate.toLocaleDateString()}</Text>
+            </View>
+          </View>
+
+          {isRecurring && (
+            <View style={styles.readOnlyRow}>
+              <MaterialCommunityIcons name="refresh" size={24} color="#666" style={styles.readOnlyIcon} />
+              <View>
+                <Text style={styles.readOnlyLabel}>Recurrence</Text>
+                <Text style={styles.readOnlyText}>
+                  {`Every ${weekFrequency} week(s) on ${selectedDays
+                    .map((day) => WEEKDAYS.find(d => d.id === day)?.name)
+                    .join(', ')}`}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {checklist.length > 0 && (
+          <View style={styles.readOnlyChecklistContainer}>
+            <Text style={[styles.readOnlyLabel, { marginBottom: 12 }]}>Checklist</Text>
+            {checklist.map((item, index) => (
+              <View key={index} style={styles.readOnlyChecklistItem}>
+                <MaterialCommunityIcons 
+                  name={item.completed ? "checkbox-marked" : "checkbox-blank-outline"} 
+                  size={24} 
+                  color={item.completed ? "#4CAF50" : "#666"} 
+                  style={styles.readOnlyIcon} 
+                />
+                <Text style={[styles.readOnlyText, { marginBottom: 0 }]}>{item.text}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity 
+          style={styles.duplicateButton}
+          onPress={() => {
+            navigation.navigate('AddReminder', {
+              cloneData: {
+                title,
+                checklist,
+                dueDate,
+                assignedTo,
+                isRecurring,
+                selectedDays,
+                weekFrequency: parseInt(weekFrequency),
+              }
+            });
+          }}
+        >
+          <Text style={styles.duplicateButtonText}>Clone Reminder</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -246,7 +337,9 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
           {familyMembers.length === 0 ? (
             <View style={styles.noChildrenContainer}>
               <Text style={styles.noChildrenText}>
-                No children found in your family. Please add children to your family first.
+                {user?.role === 'parent' 
+                  ? 'No children found in your family. Please add children to your family first.'
+                  : 'Unable to load assignee information.'}
               </Text>
             </View>
           ) : (
@@ -260,17 +353,22 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
                   key={member.id}
                   style={[
                     styles.assigneePill,
-                    assignedTo === member.id && styles.assigneePillSelected
+                    assignedTo === member.id && styles.assigneePillSelected,
+                    user?.role === 'child' && styles.disabledPill
                   ]}
-                  onPress={() => setAssignedTo(member.id)}
+                  onPress={() => user?.role === 'parent' && setAssignedTo(member.id)}
+                  disabled={user?.role === 'child'}
                 >
                   <Text 
                     style={[
                       styles.assigneePillText,
-                      assignedTo === member.id && styles.assigneePillTextSelected
+                      assignedTo === member.id && styles.assigneePillTextSelected,
+                      user?.role === 'child' && styles.disabledText
                     ]}
                   >
-                    {member.displayName}
+                    {user?.role === 'child' && member.id === user.id 
+                      ? 'Me'
+                      : member.displayName}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -317,19 +415,6 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
             {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString()}
           </Text>
         </TouchableOpacity>
-        {showDatePicker && (
-          <DateTimePicker
-            value={dueDate}
-            mode="datetime"
-            display="default"
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
-              if (selectedDate) {
-                setDueDate(selectedDate);
-              }
-            }}
-          />
-        )}
 
         <View style={styles.recurrenceSection}>
           <View style={styles.recurrenceHeader}>
@@ -372,54 +457,28 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
               </View>
 
               <Text style={styles.recurrenceLabel}>Repeat every:</Text>
-              <View style={styles.weekFrequencyContainer}>
-                <TextInput
-                  style={styles.weekFrequencyInput}
-                  value={weekFrequency}
-                  onChangeText={(text) => {
-                    if (text === '') {
-                      setWeekFrequency('');
-                      return;
-                    }
-                    const num = parseInt(text);
-                    if (!isNaN(num) && num >= 0 && num <= 12) {
-                      setWeekFrequency(text);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (weekFrequency === '' || weekFrequency === '0') {
-                      setWeekFrequency('1');
-                    }
-                  }}
-                  selectTextOnFocus={true}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
-                <Text style={styles.weekFrequencyText}>
-                  {weekFrequency === '1' ? 'week' : 'weeks'}
-                </Text>
-              </View>
-
-              <View style={styles.recurrenceInfo}>
-                <Text style={styles.recurrenceInfoText}>
-                  First occurrence: {dueDate.toLocaleDateString()}
-                </Text>
-                <Text style={styles.recurrenceInfoText}>
-                  Repeats: Every {weekFrequency} {weekFrequency === '1' ? 'week' : 'weeks'} on{' '}
-                  {selectedDays
-                    .map(id => WEEKDAYS.find(day => day.id === id)?.name)
-                    .join(', ')}
-                </Text>
-                {selectedDays.length > 0 && (
-                  <Text style={styles.recurrenceInfoText}>
-                    Next occurrence: {getNextOccurrence(
-                      dueDate,
-                      selectedDays,
-                      parseInt(weekFrequency || '1')
-                    ).toLocaleDateString()}
-                  </Text>
-                )}
-              </View>
+              <TextInput
+                style={styles.weekFrequencyInput}
+                value={weekFrequency}
+                onChangeText={(text) => {
+                  if (text === '') {
+                    setWeekFrequency('');
+                    return;
+                  }
+                  const num = parseInt(text);
+                  if (!isNaN(num) && num >= 0 && num <= 12) {
+                    setWeekFrequency(text);
+                  }
+                }}
+                onBlur={() => {
+                  if (weekFrequency === '' || weekFrequency === '0') {
+                    setWeekFrequency('1');
+                  }
+                }}
+                selectTextOnFocus={true}
+                keyboardType="numeric"
+                maxLength={2}
+              />
             </View>
           )}
         </View>
@@ -436,7 +495,7 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.cloneButton, loading && styles.submitButtonDisabled]}
+            style={[styles.duplicateButton, loading && styles.submitButtonDisabled]}
             onPress={() => {
               navigation.navigate('AddReminder', {
                 cloneData: {
@@ -452,13 +511,13 @@ export default function EditReminderScreen({ route, navigation }: EditReminderSc
             }}
             disabled={loading}
           >
-            <Text style={styles.cloneButtonText}>Clone Reminder</Text>
+            <Text style={styles.duplicateButtonText}>Clone Reminder</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -467,7 +526,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 80 : 40,
   },
   label: {
     fontSize: 16,
@@ -650,15 +708,68 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  cloneButton: {
-    backgroundColor: '#34C759',
+  readOnlyContainer: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#f5f5f5',
+  },
+  readOnlyCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  readOnlyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#1a1a1a',
+  },
+  readOnlySection: {
+    marginBottom: 12,
+  },
+  readOnlyLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  readOnlyText: {
+    fontSize: 16,
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  readOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  readOnlyIcon: {
+    marginRight: 8,
+    width: 24,
+  },
+  readOnlyChecklistContainer: {
+    marginTop: 8,
+  },
+  readOnlyChecklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  duplicateButton: {
+    backgroundColor: '#4a90e2',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 16,
   },
-  cloneButtonText: {
-    color: '#fff',
-    fontSize: 18,
+  duplicateButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: '600',
   },
   assigneeContainer: {
@@ -699,4 +810,17 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-}); 
+  disabledInput: {
+    backgroundColor: '#f5f5f5',
+    color: '#666',
+  },
+  disabledPill: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#ddd',
+  },
+  disabledText: {
+    color: '#666',
+  },
+});
+
+export default EditReminderScreen; 
