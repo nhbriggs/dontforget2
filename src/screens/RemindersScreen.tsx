@@ -13,16 +13,52 @@ import { collection, query, where, getDocs, deleteDoc, doc, orderBy, DocumentDat
 import { db } from '../config/firebase';
 import { RemindersScreenProps } from '../types/navigation';
 import { useFocusEffect } from '@react-navigation/native';
+import { Reminder } from '../types/Reminder';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 
-interface Reminder {
-  id: string;
-  title: string;
-  status: 'pending' | 'completed' | 'verified';
-  createdAt: Date;
-  assignedTo: string;
-  familyId?: string;
-  dueDate: Date;
-}
+const WEEKDAYS = [
+  { id: '0', name: 'Sunday', shortName: 'Sun' },
+  { id: '1', name: 'Monday', shortName: 'Mon' },
+  { id: '2', name: 'Tuesday', shortName: 'Tue' },
+  { id: '3', name: 'Wednesday', shortName: 'Wed' },
+  { id: '4', name: 'Thursday', shortName: 'Thu' },
+  { id: '5', name: 'Friday', shortName: 'Fri' },
+  { id: '6', name: 'Saturday', shortName: 'Sat' },
+];
+
+const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequency: number): Date => {
+  const today = new Date();
+  today.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+  
+  // If start date is in the future, and its day is selected, return it
+  if (startDate > today && selectedDays.includes(startDate.getDay().toString())) {
+    return startDate;
+  }
+
+  // Find the next occurrence
+  let nextDate = new Date(today);
+  let daysChecked = 0;
+  const maxDays = 7 * weekFrequency * 2; // Look ahead maximum 2 cycles
+
+  while (daysChecked < maxDays) {
+    nextDate.setDate(nextDate.getDate() + 1);
+    const dayOfWeek = nextDate.getDay().toString();
+    
+    if (selectedDays.includes(dayOfWeek)) {
+      // Check if this occurrence aligns with the week frequency
+      const weeksSinceStart = Math.floor(
+        (nextDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)
+      );
+      if (weeksSinceStart % weekFrequency === 0) {
+        nextDate.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+        return nextDate;
+      }
+    }
+    daysChecked++;
+  }
+
+  return nextDate; // Fallback, should rarely happen
+};
 
 export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   const { user, signOut } = useAuth();
@@ -83,6 +119,15 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
           assignedTo: data.assignedTo,
           familyId: data.familyId,
           dueDate: data.dueDate.toDate(),
+          isRecurring: data.isRecurring || false,
+          recurrenceConfig: data.recurrenceConfig ? {
+            selectedDays: data.recurrenceConfig.selectedDays,
+            weekFrequency: data.recurrenceConfig.weekFrequency,
+            startDate: data.recurrenceConfig.startDate.toDate(),
+            lastGenerated: data.recurrenceConfig.lastGenerated.toDate(),
+          } : null,
+          checklist: data.checklist || [],
+          createdBy: data.createdBy,
         });
       });
 
@@ -157,7 +202,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
         <Text style={styles.headerTitle}>Reminders</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
-            onPress={() => navigation.navigate('AddReminder')} 
+            onPress={() => navigation.navigate('AddReminder' as const)} 
             style={styles.addButton}
           >
             <Text style={styles.addButtonText}>Add Reminder</Text>
@@ -191,27 +236,54 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() => navigation.navigate('EditReminder', { reminderId: item.id })}
+              onPress={() => navigation.navigate('EditReminder' as const, { reminderId: item.id })}
               style={styles.reminderItem}
             >
               <View style={styles.reminderContent}>
                 <Text style={styles.reminderTitle}>{item.title}</Text>
-                <Text style={styles.reminderAssignee}>
-                  Assigned to: {assigneeNames[item.assignedTo] || 'Loading...'}
-                </Text>
-                <Text style={[
-                  styles.reminderDueDate,
-                  new Date() > item.dueDate && styles.reminderOverdue
-                ]}>
-                  Due: {formatDueDate(item.dueDate)}
-                </Text>
-                <Text style={[
-                  styles.reminderStatus,
-                  item.status === 'completed' && styles.statusCompleted,
-                  item.status === 'verified' && styles.statusVerified
-                ]}>
-                  Status: {item.status}
-                </Text>
+                <View style={styles.reminderField}>
+                  <MaterialCommunityIcons name="account-circle" size={16} color="#666" />
+                  <Text style={styles.reminderAssignee}>
+                    {' Assigned to: '}{assigneeNames[item.assignedTo] || 'Loading...'}
+                  </Text>
+                </View>
+                <View style={styles.reminderField}>
+                  <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
+                  <Text style={[
+                    styles.reminderDueDate,
+                    new Date() > item.dueDate && styles.reminderOverdue
+                  ]}>
+                    {' Due: '}{formatDueDate(item.dueDate)}
+                  </Text>
+                </View>
+                {item.isRecurring && item.recurrenceConfig && (
+                  <View style={styles.reminderField}>
+                    <MaterialCommunityIcons name="refresh" size={16} color="#007AFF" />
+                    <Text style={styles.nextOccurrence}>
+                      {' Next occurrence: '}{formatDueDate(getNextOccurrence(
+                        item.recurrenceConfig.startDate,
+                        item.recurrenceConfig.selectedDays,
+                        item.recurrenceConfig.weekFrequency
+                      ))}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.reminderField}>
+                  <Ionicons 
+                    name={item.status === 'completed' ? 'checkmark-circle' : 
+                          item.status === 'verified' ? 'shield-checkmark' : 'hourglass-outline'} 
+                    size={16} 
+                    color={item.status === 'completed' ? '#34c759' : 
+                          item.status === 'verified' ? '#007aff' : '#999'} 
+                  />
+                  <Text style={[
+                    styles.reminderStatus,
+                    item.status === 'completed' && styles.statusCompleted,
+                    item.status === 'verified' && styles.statusVerified
+                  ]}>
+                    {' Status: '}{item.status}
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity
                 onPress={() => handleDeleteReminder(item.id)}
@@ -326,15 +398,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
+  reminderField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
   reminderAssignee: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
   },
   reminderDueDate: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
   },
   reminderOverdue: {
     color: '#ff3b30',
@@ -358,5 +433,10 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: '#fff',
     fontSize: 14,
+  },
+  nextOccurrence: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontStyle: 'italic',
   },
 }); 
