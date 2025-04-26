@@ -9,28 +9,34 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, getDocs, deleteDoc, doc, orderBy, DocumentData } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, orderBy, DocumentData, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { RemindersScreenProps } from '../types/navigation';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface Reminder {
   id: string;
   title: string;
-  description?: string;
   status: 'pending' | 'completed' | 'verified';
   createdAt: Date;
   assignedTo: string;
   familyId?: string;
+  dueDate: Date;
 }
 
-export default function RemindersScreen() {
+export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   const { user, signOut } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadReminders();
-  }, [user]); // Reload when user changes
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Screen focused, loading reminders');
+      loadReminders();
+    }, [user])
+  );
 
   const loadReminders = async () => {
     try {
@@ -64,19 +70,36 @@ export default function RemindersScreen() {
       const querySnapshot = await getDocs(q);
       
       const loadedReminders: Reminder[] = [];
+      const assigneeIds = new Set<string>();
+      
       querySnapshot.forEach((doc) => {
         const data = doc.data() as DocumentData;
+        assigneeIds.add(data.assignedTo);
         loadedReminders.push({
           id: doc.id,
           title: data.title,
-          description: data.description,
           status: data.status,
           createdAt: data.createdAt.toDate(),
           assignedTo: data.assignedTo,
           familyId: data.familyId,
+          dueDate: data.dueDate.toDate(),
         });
       });
 
+      // Load assignee names
+      const names: Record<string, string> = {};
+      for (const assigneeId of assigneeIds) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', assigneeId));
+          if (userDoc.exists()) {
+            names[assigneeId] = userDoc.data().displayName || 'Unknown';
+          }
+        } catch (error) {
+          console.error('Error loading assignee name:', error);
+        }
+      }
+      
+      setAssigneeNames(names);
       setReminders(loadedReminders);
     } catch (error) {
       console.error('Error loading reminders:', error);
@@ -106,6 +129,20 @@ export default function RemindersScreen() {
     }
   };
 
+  const formatDueDate = (date: Date) => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return `Today at ${date.toLocaleTimeString()}`;
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return `Tomorrow at ${date.toLocaleTimeString()}`;
+    } else {
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -118,9 +155,20 @@ export default function RemindersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reminders</Text>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('AddReminder')} 
+            style={styles.addButton}
+          >
+            <Text style={styles.addButtonText}>Add Reminder</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleSignOut} 
+            style={styles.signOutButton}
+          >
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error ? (
@@ -142,13 +190,28 @@ export default function RemindersScreen() {
           data={reminders}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={styles.reminderItem}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditReminder', { reminderId: item.id })}
+              style={styles.reminderItem}
+            >
               <View style={styles.reminderContent}>
                 <Text style={styles.reminderTitle}>{item.title}</Text>
-                {item.description && (
-                  <Text style={styles.reminderDescription}>{item.description}</Text>
-                )}
-                <Text style={styles.reminderStatus}>Status: {item.status}</Text>
+                <Text style={styles.reminderAssignee}>
+                  Assigned to: {assigneeNames[item.assignedTo] || 'Loading...'}
+                </Text>
+                <Text style={[
+                  styles.reminderDueDate,
+                  new Date() > item.dueDate && styles.reminderOverdue
+                ]}>
+                  Due: {formatDueDate(item.dueDate)}
+                </Text>
+                <Text style={[
+                  styles.reminderStatus,
+                  item.status === 'completed' && styles.statusCompleted,
+                  item.status === 'verified' && styles.statusVerified
+                ]}>
+                  Status: {item.status}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={() => handleDeleteReminder(item.id)}
@@ -156,7 +219,7 @@ export default function RemindersScreen() {
               >
                 <Text style={styles.deleteButtonText}>Delete</Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -180,6 +243,20 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+    padding: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 14,
   },
   signOutButton: {
     backgroundColor: '#ff3b30',
@@ -249,14 +326,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  reminderDescription: {
+  reminderAssignee: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  reminderDueDate: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 2,
+  },
+  reminderOverdue: {
+    color: '#ff3b30',
   },
   reminderStatus: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#999',
+  },
+  statusCompleted: {
+    color: '#34c759',
+  },
+  statusVerified: {
+    color: '#007aff',
   },
   deleteButton: {
     backgroundColor: '#ff3b30',

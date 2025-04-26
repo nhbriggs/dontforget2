@@ -8,13 +8,12 @@ import {
   ScrollView,
   Alert,
   Switch,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { AddReminderScreenProps } from '../types/navigation';
+import { EditReminderScreenProps } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, addDoc, getDocs, query, where, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ChecklistItem } from '../types/Reminder';
@@ -77,130 +76,79 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
   return nextDate; // Fallback, should rarely happen
 };
 
-export default function AddReminderScreen({ navigation, route }: AddReminderScreenProps) {
-  const { user, updateUser } = useAuth();
-  const cloneData = route.params?.cloneData;
-  const [title, setTitle] = useState(cloneData?.title || '');
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(cloneData?.checklist || []);
+export default function EditReminderScreen({ route, navigation }: EditReminderScreenProps) {
+  const { reminderId } = route.params;
+  const { user } = useAuth();
+  const [title, setTitle] = useState('');
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState('');
-  const [dueDate, setDueDate] = useState(cloneData?.dueDate || new Date());
+  const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [assignedTo, setAssignedTo] = useState(cloneData?.assignedTo || '');
+  const [assignedTo, setAssignedTo] = useState('');
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
-  const [isRecurring, setIsRecurring] = useState(cloneData?.isRecurring || false);
-  const [selectedDays, setSelectedDays] = useState<string[]>(cloneData?.selectedDays || []);
-  const [weekFrequency, setWeekFrequency] = useState(cloneData?.weekFrequency?.toString() || '1');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [weekFrequency, setWeekFrequency] = useState('1');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const initializeFamily = async () => {
-      if (!user) return;
-      
-      console.log('DEBUG: Checking user family status');
-      if (!user.familyId) {
-        console.log('DEBUG: User missing familyId, checking if in Bruggs family');
-        const familyRef = doc(db, 'families', 'bruggs-family');
-        const familyDoc = await getDoc(familyRef);
-        
-        if (!familyDoc.exists()) {
-          console.log('DEBUG: Creating bruggs-family document');
-          await setDoc(familyRef, {
-            id: 'bruggs-family',
-            name: 'Bruggs Family',
-            parentIds: { [user.id]: true },
-            childrenIds: [],
-            createdAt: new Date()
-          });
-          console.log('DEBUG: Created family document');
-        } else {
-          console.log('DEBUG: Family document exists, updating parentIds');
-          const familyData = familyDoc.data();
-          if (!familyData.parentIds) {
-            familyData.parentIds = {};
-          }
-          familyData.parentIds[user.id] = true;
-          await updateDoc(familyRef, { parentIds: familyData.parentIds });
-        }
+    loadReminderData();
+    loadFamilyMembers();
+  }, []);
 
-        // Update user with familyId
-        try {
-          await updateUser({ familyId: 'bruggs-family' });
-          console.log('DEBUG: Updated user familyId in both Firestore and auth context');
-          await loadFamilyMembers();
-        } catch (error) {
-          console.error('DEBUG: Error updating user:', error);
+  const loadReminderData = async () => {
+    try {
+      const reminderDoc = await getDoc(doc(db, 'reminders', reminderId));
+      if (reminderDoc.exists()) {
+        const data = reminderDoc.data();
+        setTitle(data.title);
+        setChecklist(data.checklist || []);
+        setDueDate(data.dueDate.toDate());
+        setAssignedTo(data.assignedTo);
+        setIsRecurring(data.isRecurring || false);
+        if (data.recurrenceConfig) {
+          setSelectedDays(data.recurrenceConfig.selectedDays || []);
+          setWeekFrequency(data.recurrenceConfig.weekFrequency?.toString() || '1');
         }
-      } else {
-        await loadFamilyMembers();
       }
-    };
-
-    initializeFamily();
-  }, [user, updateUser]);
+    } catch (error) {
+      console.error('Error loading reminder:', error);
+      Alert.alert('Error', 'Failed to load reminder details');
+    }
+  };
 
   const loadFamilyMembers = async () => {
-    console.log('DEBUG: Starting loadFamilyMembers function');
-    if (!user?.familyId) {
-      console.log('DEBUG: No familyId found for user:', user);
-      return;
-    }
+    if (!user?.familyId) return;
 
     try {
-      // Get the family document directly using the familyId
-      console.log('DEBUG: Fetching family document with ID:', user.familyId);
       const familyRef = doc(db, 'families', user.familyId);
       const familySnapshot = await getDoc(familyRef);
 
-      if (!familySnapshot.exists()) {
-        console.log('DEBUG: No family document found with ID:', user.familyId);
-        return;
-      }
+      if (!familySnapshot.exists()) return;
 
       const familyData = familySnapshot.data();
-      console.log('DEBUG: Found family data:', familyData);
-
-      // Get children IDs from the array
       const childrenIds = familyData.childrenIds || [];
-      console.log('DEBUG: Found childrenIds:', childrenIds);
 
-      if (childrenIds.length === 0) {
-        console.log('DEBUG: No children IDs found in family');
-        return;
-      }
-
-      // Now get the user documents for each child
       const members: FamilyMember[] = [];
-      console.log('DEBUG: Starting to fetch each child document');
       
       for (const childId of childrenIds) {
-        console.log('DEBUG: Fetching user document for childId:', childId);
         const userRef = doc(db, 'users', childId);
         const userSnapshot = await getDoc(userRef);
         
         if (userSnapshot.exists()) {
           const userData = userSnapshot.data();
-          console.log('DEBUG: Found child data:', userData);
           members.push({
             id: childId,
             displayName: userData.displayName || 'Unknown',
             email: userData.email || '',
             role: 'child'
           });
-        } else {
-          console.log('DEBUG: No user document found for childId:', childId);
         }
       }
 
-      console.log('DEBUG: Final members list:', members);
       setFamilyMembers(members);
-      if (members.length > 0) {
-        setAssignedTo(members[0].id);
-        console.log('DEBUG: Set assignedTo to first member:', members[0].id);
-      } else {
-        console.log('DEBUG: No members found to assign to');
-      }
     } catch (error) {
-      console.error('DEBUG: Error loading family members:', error);
+      console.error('Error loading family members:', error);
       Alert.alert('Error', 'Failed to load family members');
     }
   };
@@ -249,15 +197,12 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
 
     try {
       setLoading(true);
-      const reminderData = {
+      const reminderRef = doc(db, 'reminders', reminderId);
+      await updateDoc(reminderRef, {
         title: title.trim(),
         checklist,
         assignedTo,
-        familyId: user?.familyId,
-        createdBy: user?.id,
-        createdAt: new Date(),
         dueDate,
-        status: 'pending',
         isRecurring,
         recurrenceConfig: isRecurring ? {
           selectedDays: selectedDays,
@@ -265,13 +210,12 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           startDate: dueDate,
           lastGenerated: new Date(),
         } : null,
-      };
-
-      await addDoc(collection(db, 'reminders'), reminderData);
+        updatedAt: new Date(),
+      });
       navigation.goBack();
     } catch (error) {
-      console.error('Error creating reminder:', error);
-      Alert.alert('Error', 'Failed to create reminder');
+      console.error('Error updating reminder:', error);
+      Alert.alert('Error', 'Failed to update reminder');
     } finally {
       setLoading(false);
     }
@@ -480,15 +424,37 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           )}
         </View>
 
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          <Text style={styles.submitButtonText}>
-            {loading ? 'Creating...' : 'Create Reminder'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            <Text style={styles.submitButtonText}>
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.cloneButton, loading && styles.submitButtonDisabled]}
+            onPress={() => {
+              navigation.navigate('AddReminder', {
+                cloneData: {
+                  title,
+                  checklist,
+                  dueDate,
+                  assignedTo,
+                  isRecurring,
+                  selectedDays,
+                  weekFrequency: parseInt(weekFrequency),
+                }
+              });
+            }}
+            disabled={loading}
+          >
+            <Text style={styles.cloneButtonText}>Clone Reminder</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -568,17 +534,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     overflow: 'hidden',
-    backgroundColor: '#f8f8f8',
-  },
-  sublabel: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 12,
-    marginTop: 8,
   },
   picker: {
-    height: 48,
-    backgroundColor: '#fff',
+    height: 50,
   },
   dateButton: {
     borderWidth: 1,
@@ -614,78 +572,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginBottom: 8,
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-  },
-  recurrenceInfo: {
-    backgroundColor: '#f0f7ff',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  recurrenceInfoText: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginBottom: 4,
-  },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  assigneeContainer: {
-    marginBottom: 16,
-  },
-  assigneePillsContainer: {
-    paddingHorizontal: 4,
-  },
-  assigneePill: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginHorizontal: 4,
-    borderWidth: 2,
-    borderColor: '#f0f0f0',
-  },
-  assigneePillSelected: {
-    backgroundColor: '#007AFF20',
-    borderColor: '#007AFF',
-  },
-  assigneePillText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  assigneePillTextSelected: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  noChildrenContainer: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-  },
-  noChildrenText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
   },
   daysContainer: {
     flexDirection: 'row',
@@ -732,5 +618,85 @@ const styles = StyleSheet.create({
   weekFrequencyText: {
     fontSize: 16,
     color: '#333',
+  },
+  recurrenceInfo: {
+    backgroundColor: '#f0f7ff',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  recurrenceInfoText: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginBottom: 4,
+  },
+  buttonContainer: {
+    flexDirection: 'column',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  submitButton: {
+    backgroundColor: '#007AFF',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  cloneButton: {
+    backgroundColor: '#34C759',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cloneButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  assigneeContainer: {
+    marginBottom: 16,
+  },
+  assigneePillsContainer: {
+    paddingHorizontal: 4,
+  },
+  assigneePill: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#f0f0f0',
+  },
+  assigneePillSelected: {
+    backgroundColor: '#007AFF20',
+    borderColor: '#007AFF',
+  },
+  assigneePillText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  assigneePillTextSelected: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  noChildrenContainer: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  noChildrenText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 }); 
