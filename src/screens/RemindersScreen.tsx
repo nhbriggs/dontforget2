@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, getDocs, deleteDoc, doc, orderBy, DocumentData, getDoc } from 'firebase/firestore';
@@ -14,7 +15,12 @@ import { db } from '../config/firebase';
 import { RemindersScreenProps } from '../types/navigation';
 import { useFocusEffect } from '@react-navigation/native';
 import { Reminder } from '../types/Reminder';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, Ionicons, AntDesign } from '@expo/vector-icons';
+
+interface FamilyMember {
+  id: string;
+  displayName: string;
+}
 
 const WEEKDAYS = [
   { id: '0', name: 'Sunday', shortName: 'Sun' },
@@ -61,18 +67,51 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
 };
 
 export default function RemindersScreen({ navigation }: RemindersScreenProps) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
+  const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
       console.log('Screen focused, loading reminders');
       loadReminders();
+      loadFamilyMembers();
     }, [user])
   );
+
+  const loadFamilyMembers = async () => {
+    if (!user?.familyId) return;
+
+    try {
+      const familyRef = doc(db, 'families', user.familyId);
+      const familySnapshot = await getDoc(familyRef);
+
+      if (!familySnapshot.exists()) return;
+
+      const familyData = familySnapshot.data();
+      const childrenIds = familyData.childrenIds || [];
+
+      const members: FamilyMember[] = [];
+      for (const childId of childrenIds) {
+        const userDoc = await getDoc(doc(db, 'users', childId));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          members.push({
+            id: childId,
+            displayName: userData.displayName || 'Unknown',
+          });
+        }
+      }
+
+      setFamilyMembers(members);
+    } catch (error) {
+      console.error('Error loading family members:', error);
+    }
+  };
 
   const loadReminders = async () => {
     try {
@@ -165,15 +204,6 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-      Alert.alert('Error', 'Failed to sign out. Please try again.');
-    }
-  };
-
   const formatDueDate = (date: Date) => {
     const today = new Date();
     const tomorrow = new Date(today);
@@ -188,6 +218,10 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     }
   };
 
+  const filteredReminders = selectedFilter
+    ? reminders.filter(reminder => reminder.assignedTo === selectedFilter)
+    : reminders;
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -198,22 +232,47 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Reminders</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('AddReminder' as const)} 
-            style={styles.addButton}
-          >
-            <Text style={styles.addButtonText}>Add Reminder</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={handleSignOut} 
-            style={styles.signOutButton}
-          >
-            <Text style={styles.signOutButtonText}>Sign Out</Text>
-          </TouchableOpacity>
+      <View style={styles.topSection}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Reminders</Text>
         </View>
+
+        {familyMembers.length > 0 && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                selectedFilter === null && styles.filterPillSelected
+              ]}
+              onPress={() => setSelectedFilter(null)}
+            >
+              <Text style={[
+                styles.filterPillText,
+                selectedFilter === null && styles.filterPillTextSelected
+              ]}>All</Text>
+            </TouchableOpacity>
+            {familyMembers.map(member => (
+              <TouchableOpacity
+                key={member.id}
+                style={[
+                  styles.filterPill,
+                  selectedFilter === member.id && styles.filterPillSelected
+                ]}
+                onPress={() => setSelectedFilter(member.id)}
+              >
+                <Text style={[
+                  styles.filterPillText,
+                  selectedFilter === member.id && styles.filterPillTextSelected
+                ]}>{member.displayName}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {error ? (
@@ -223,20 +282,26 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : reminders.length === 0 ? (
+      ) : filteredReminders.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.noReminders}>No reminders found</Text>
           <Text style={styles.emptySubtext}>
-            {user?.familyId ? 'Create a new reminder to get started' : 'Join a family to see shared reminders'}
+            {user?.familyId 
+              ? selectedFilter 
+                ? `No reminders assigned to ${assigneeNames[selectedFilter]}`
+                : 'Create a new reminder to get started'
+              : 'Join a family to see shared reminders'
+            }
           </Text>
         </View>
       ) : (
         <FlatList
-          data={reminders}
+          style={styles.reminderList}
+          data={filteredReminders}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() => navigation.navigate('EditReminder' as const, { reminderId: item.id })}
+              onPress={() => navigation.navigate('EditReminder', { reminderId: item.id })}
               style={styles.reminderItem}
             >
               <View style={styles.reminderContent}>
@@ -289,12 +354,19 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                 onPress={() => handleDeleteReminder(item.id)}
                 style={styles.deleteButton}
               >
-                <Text style={styles.deleteButtonText}>Delete</Text>
+                <MaterialCommunityIcons name="trash-can-outline" size={22} color="#ff3b30" />
               </TouchableOpacity>
             </TouchableOpacity>
           )}
         />
       )}
+      <TouchableOpacity 
+        onPress={() => navigation.navigate('AddReminder', {})} 
+        style={styles.fabButton}
+      >
+        <AntDesign name="plus" size={20} color="#fff" />
+        <Text style={styles.fabButtonText}>New Reminder</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -304,13 +376,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  topSection: {
+    backgroundColor: '#fff',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingBottom: 8,
   },
   headerTitle: {
     fontSize: 20,
@@ -319,25 +393,6 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    padding: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  signOutButton: {
-    backgroundColor: '#ff3b30',
-    padding: 8,
-    borderRadius: 4,
-  },
-  signOutButtonText: {
-    color: '#fff',
-    fontSize: 14,
   },
   centered: {
     flex: 1,
@@ -386,6 +441,7 @@ const styles = StyleSheet.create({
   reminderItem: {
     flexDirection: 'row',
     padding: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     alignItems: 'center',
@@ -425,18 +481,77 @@ const styles = StyleSheet.create({
     color: '#007aff',
   },
   deleteButton: {
-    backgroundColor: '#ff3b30',
     padding: 8,
-    borderRadius: 4,
     marginLeft: 8,
-  },
-  deleteButtonText: {
-    color: '#fff',
-    fontSize: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   nextOccurrence: {
     fontSize: 14,
     color: '#007AFF',
     fontStyle: 'italic',
+  },
+  filterContainer: {
+    height: 36,
+    paddingTop: 8,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 8,
+  },
+  filterContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+    alignItems: 'center',
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+    backgroundColor: '#f0f0f0',
+    marginRight: 6,
+    height: 24,
+    justifyContent: 'center',
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  filterPillSelected: {
+    backgroundColor: '#007AFF',
+  },
+  filterPillText: {
+    fontSize: 15,
+    color: '#666',
+    fontWeight: '400',
+  },
+  filterPillTextSelected: {
+    color: '#fff',
+  },
+  reminderList: {
+    flex: 1,
+  },
+  fabButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#007AFF',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  fabButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 }); 
