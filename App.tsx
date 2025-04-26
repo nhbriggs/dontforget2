@@ -6,6 +6,7 @@ import SignInScreen from './src/screens/SignInScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
 import AddReminderScreen from './src/screens/AddReminderScreen';
+import EditReminderScreen from './src/screens/EditReminderScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -32,6 +33,7 @@ function Navigation() {
         <>
           <Stack.Screen name="Reminders" component={RemindersScreen} />
           <Stack.Screen name="AddReminder" component={AddReminderScreen} />
+          <Stack.Screen name="EditReminder" component={EditReminderScreen} />
         </>
       ) : (
         // No user is signed in

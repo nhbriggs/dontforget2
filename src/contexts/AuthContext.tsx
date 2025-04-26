@@ -5,7 +5,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import type { User } from '../types';
 
@@ -15,6 +15,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, role: 'parent' | 'child', displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (updates: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -59,6 +60,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
+  const updateUser = async (updates: Partial<User>) => {
+    if (!user?.id) return;
+    
+    console.log('Updating user with:', updates);
+    try {
+      const userRef = doc(db, 'users', user.id);
+      await updateDoc(userRef, updates);
+      
+      // Update local state
+      setUser(prevUser => {
+        if (!prevUser) return null;
+        return { ...prevUser, ...updates };
+      });
+      
+      console.log('User updated successfully');
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  };
+
   const signIn = async (email: string, password: string) => {
     console.log('Attempting sign in for:', email);
     try {
@@ -77,13 +99,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Sign up successful:', firebaseUser.uid);
       
       // Create user document in Firestore
-      await setDoc(doc(db, 'users', firebaseUser.uid), {
+      const userData = {
+        id: firebaseUser.uid,
         email,
         role,
         displayName,
         createdAt: new Date(),
-      });
+      };
+      
+      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
       console.log('User document created in Firestore');
+
+      // If this is a parent signing up, create or update the family document
+      if (role === 'parent') {
+        const familyRef = doc(db, 'families', 'bruggs-family');
+        const familyDoc = await getDoc(familyRef);
+        
+        if (!familyDoc.exists()) {
+          await setDoc(familyRef, {
+            id: 'bruggs-family',
+            name: 'Bruggs Family',
+            parentIds: { [firebaseUser.uid]: true },
+            childrenIds: [],
+            createdAt: new Date()
+          });
+          console.log('Created new family document');
+        } else {
+          const familyData = familyDoc.data();
+          if (!familyData.parentIds) {
+            familyData.parentIds = {};
+          }
+          familyData.parentIds[firebaseUser.uid] = true;
+          await updateDoc(familyRef, { parentIds: familyData.parentIds });
+          console.log('Updated existing family document');
+        }
+        
+        // Update user with familyId
+        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+          familyId: 'bruggs-family'
+        });
+      }
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;
@@ -102,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
