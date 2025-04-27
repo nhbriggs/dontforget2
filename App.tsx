@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import SignInScreen from './src/screens/SignInScreen';
@@ -7,6 +7,7 @@ import SignUpScreen from './src/screens/SignUpScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
 import AddReminderScreen from './src/screens/AddReminderScreen';
 import EditReminderScreen from './src/screens/EditReminderScreen';
+import CompleteReminderScreen from './src/screens/CompleteReminderScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -33,6 +34,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function Navigation() {
   const { user, loading, signOut } = useAuth();
   const handledNotifications = useRef(new Set());
+  const navigation = useNavigation();
 
   useEffect(() => {
     const setupNotifications = async () => {
@@ -96,6 +98,11 @@ function Navigation() {
                   await Notifications.dismissNotificationAsync(notificationId);
                 } catch (error) {
                   console.log('⚠️ Could not dismiss notification:', error);
+                }
+                // Navigate to complete reminder screen if we have a reminder ID
+                if (reminderId) {
+                  // @ts-ignore - navigation type is correct but TypeScript doesn't recognize it
+                  navigation.navigate('CompleteReminder', { reminderId });
                 }
               }
             },
@@ -175,7 +182,8 @@ function Navigation() {
         console.log('==========================================\n');
       });
 
-      // Test notification
+      // Test notification - commented out for production
+      /*
       if (hasPermission) {
         console.log('🔔 Scheduling test notification...');
         const testNotificationId = await Notifications.scheduleNotificationAsync({
@@ -190,6 +198,7 @@ function Navigation() {
         });
         console.log('📱 Test notification scheduled with ID:', testNotificationId);
       }
+      */
 
       return () => {
         receivedSubscription.remove();
@@ -250,6 +259,19 @@ function Navigation() {
             component={EditReminderScreen}
             options={{
               title: 'Edit Reminder',
+              headerStyle: {
+                backgroundColor: '#fff',
+              },
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+            }}
+          />
+          <Stack.Screen 
+            name="CompleteReminder" 
+            component={CompleteReminderScreen}
+            options={{
+              title: 'Complete Reminder',
               headerStyle: {
                 backgroundColor: '#fff',
               },

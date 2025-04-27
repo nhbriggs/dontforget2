@@ -13,14 +13,17 @@ import {
 } from 'react-native';
 import { EditReminderScreenProps } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { ChecklistItem } from '../types/Reminder';
+import { ChecklistItem, Reminder } from '../types/Reminder';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import NotificationService from '../services/NotificationService';
 import * as Notifications from 'expo-notifications';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 
 interface FamilyMember {
   id: string;
@@ -82,6 +85,9 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
 const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigation }) => {
   const { reminderId, canEdit } = route.params;
   const { user } = useAuth();
+  const navigationNative = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [loading, setLoading] = useState(true);
+  const [reminder, setReminder] = useState<Reminder | null>(null);
   const [title, setTitle] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -92,33 +98,46 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [weekFrequency, setWeekFrequency] = useState('1');
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadReminderData();
-    loadFamilyMembers();
-  }, []);
+    const loadReminder = async () => {
+      if (!user) return;
 
-  const loadReminderData = async () => {
-    try {
-      const reminderDoc = await getDoc(doc(db, 'reminders', reminderId));
-      if (reminderDoc.exists()) {
-        const data = reminderDoc.data();
-        setTitle(data.title);
-        setChecklist(data.checklist || []);
-        setDueDate(data.dueDate.toDate());
-        setAssignedTo(data.assignedTo);
-        setIsRecurring(data.isRecurring || false);
-        if (data.recurrenceConfig) {
-          setSelectedDays(data.recurrenceConfig.selectedDays || []);
-          setWeekFrequency(data.recurrenceConfig.weekFrequency?.toString() || '1');
+      try {
+        const reminderDoc = await getDoc(doc(db, 'reminders', reminderId));
+        if (reminderDoc.exists()) {
+          const reminderData = reminderDoc.data() as Reminder;
+          setReminder(reminderData);
+          
+          // If the reminder is completed, don't set up the edit form
+          if (reminderData.status === 'completed') {
+            setLoading(false);
+            return;
+          }
+
+          setTitle(reminderData.title);
+          setChecklist(reminderData.checklist);
+          if (reminderData.dueDate instanceof Timestamp) {
+            setDueDate(reminderData.dueDate.toDate());
+          }
+          setAssignedTo(reminderData.assignedTo);
+          setIsRecurring(reminderData.isRecurring);
+          if (reminderData.recurrenceConfig) {
+            setSelectedDays(reminderData.recurrenceConfig.selectedDays);
+            setWeekFrequency(reminderData.recurrenceConfig.weekFrequency.toString());
+          }
         }
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading reminder:', error);
+        Alert.alert('Error', 'Failed to load reminder');
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading reminder:', error);
-      Alert.alert('Error', 'Failed to load reminder details');
-    }
-  };
+    };
+
+    loadReminder();
+    loadFamilyMembers();
+  }, [reminderId, user]);
 
   const loadFamilyMembers = async () => {
     if (!user?.familyId) return;
@@ -268,7 +287,7 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
     }
   };
 
-  if (!canEdit) {
+  if (!canEdit || loading || !reminder) {
     return (
       <ScrollView style={styles.readOnlyContainer}>
         <View style={styles.readOnlyCard}>
@@ -339,6 +358,108 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
           }}
         >
           <Text style={styles.duplicateButtonText}>Clone Reminder</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (reminder.status === 'completed') {
+    return (
+      <ScrollView style={styles.readOnlyContainer}>
+        <View style={styles.readOnlyCard}>
+          <Text style={styles.readOnlyTitle}>{reminder.title}</Text>
+          
+          <View style={styles.readOnlyRow}>
+            <MaterialCommunityIcons name="check-circle" size={24} color="#4CAF50" style={styles.readOnlyIcon} />
+            <View>
+              <Text style={styles.readOnlyLabel}>Completed</Text>
+              <Text style={styles.readOnlyText}>
+                {reminder.completedAt instanceof Timestamp 
+                  ? reminder.completedAt.toDate().toLocaleString() 
+                  : reminder.completedAt instanceof Date 
+                    ? reminder.completedAt.toLocaleString()
+                    : 'Date not available'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.readOnlyRow}>
+            <MaterialCommunityIcons name="account" size={24} color="#666" style={styles.readOnlyIcon} />
+            <View>
+              <Text style={styles.readOnlyLabel}>Completed by</Text>
+              <Text style={styles.readOnlyText}>
+                {familyMembers.find(m => m.id === reminder.assignedTo)?.displayName || 'Unknown'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.readOnlyRow}>
+            <MaterialCommunityIcons name="calendar" size={24} color="#666" style={styles.readOnlyIcon} />
+            <View>
+              <Text style={styles.readOnlyLabel}>Original Due Date</Text>
+              <Text style={styles.readOnlyText}>
+                {reminder.dueDate instanceof Timestamp ? reminder.dueDate.toDate().toLocaleString() : 'Date not available'}
+              </Text>
+            </View>
+          </View>
+
+          {reminder.isRecurring && reminder.recurrenceConfig && (
+            <View style={styles.readOnlyRow}>
+              <MaterialCommunityIcons name="refresh" size={24} color="#666" style={styles.readOnlyIcon} />
+              <View>
+                <Text style={styles.readOnlyLabel}>Was Recurring</Text>
+                <Text style={styles.readOnlyText}>
+                  {`Every ${reminder.recurrenceConfig.weekFrequency} week(s) on ${reminder.recurrenceConfig.selectedDays
+                    .map((day) => WEEKDAYS.find(d => d.id === day)?.name)
+                    .join(', ')}`}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {reminder.checklist.length > 0 && (
+          <View style={styles.readOnlyChecklistContainer}>
+            <Text style={[styles.readOnlyLabel, { marginBottom: 12 }]}>Completed Checklist</Text>
+            {reminder.checklist.map((item, index) => (
+              <View key={index} style={styles.readOnlyChecklistItem}>
+                <MaterialCommunityIcons 
+                  name={item.completed ? "checkbox-marked" : "checkbox-blank-outline"} 
+                  size={24} 
+                  color={item.completed ? "#4CAF50" : "#666"} 
+                  style={styles.readOnlyIcon} 
+                />
+                <Text style={[
+                  styles.readOnlyText, 
+                  { marginBottom: 0 },
+                  item.completed && styles.completedChecklistText
+                ]}>
+                  {item.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.cloneButton}
+          onPress={() => {
+            if (reminder.dueDate instanceof Timestamp) {
+              navigationNative.navigate('AddReminder', {
+                cloneData: {
+                  title: reminder.title,
+                  checklist: reminder.checklist,
+                  dueDate: reminder.dueDate.toDate(),
+                  assignedTo: reminder.assignedTo,
+                  isRecurring: reminder.isRecurring,
+                  selectedDays: reminder.recurrenceConfig?.selectedDays || [],
+                  weekFrequency: reminder.recurrenceConfig?.weekFrequency || 1,
+                },
+              });
+            }
+          }}
+        >
+          <Text style={styles.cloneButtonText}>Clone Reminder</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -798,7 +919,15 @@ const styles = StyleSheet.create({
     width: 24,
   },
   readOnlyChecklistContainer: {
-    marginTop: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   readOnlyChecklistItem: {
     flexDirection: 'row',
@@ -865,6 +994,38 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#666',
+  },
+  completedContainer: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  completedText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#666',
+  },
+  cloneButton: {
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 8,
+    width: '80%',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 30,
+    alignSelf: 'center',
+  },
+  cloneButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  completedChecklistText: {
+    textDecorationLine: 'line-through',
+    color: '#4CAF50',
   },
 });
 

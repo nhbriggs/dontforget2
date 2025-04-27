@@ -26,4 +26,5 @@ export interface Reminder {
   updatedAt?: Date;
   snoozeCount?: number;
   lastSnoozedAt?: Date;
+  completedAt?: Date;
 } 

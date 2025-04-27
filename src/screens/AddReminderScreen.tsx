@@ -139,6 +139,23 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
     initializeFamily();
   }, [user, updateUser]);
 
+  useEffect(() => {
+    if (route.params?.cloneData) {
+      const { title, checklist, dueDate, assignedTo, isRecurring, selectedDays, weekFrequency } = route.params.cloneData;
+      setTitle(title);
+      // Reset checklist items to uncompleted state when cloning
+      setChecklist(checklist.map(item => ({
+        ...item,
+        completed: false
+      })));
+      setDueDate(dueDate);
+      setAssignedTo(assignedTo);
+      setIsRecurring(isRecurring);
+      setSelectedDays(selectedDays || []);
+      setWeekFrequency(weekFrequency?.toString() || '1');
+    }
+  }, [route.params?.cloneData]);
+
   const loadFamilyMembers = async () => {
     console.log('DEBUG: Starting loadFamilyMembers function');
     if (!user?.familyId) {
@@ -273,6 +290,7 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           startDate: dueDate,
           lastGenerated: new Date(),
         } : null,
+        snoozeCount: 0,
       };
 
       // Add the reminder to Firestore

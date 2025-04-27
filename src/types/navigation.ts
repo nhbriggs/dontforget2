@@ -20,10 +20,14 @@ export type RootStackParamList = {
     reminderId: string;
     canEdit?: boolean;
   };
+  CompleteReminder: {
+    reminderId: string;
+  };
 };
 
 export type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 export type SignUpScreenProps = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 export type RemindersScreenProps = NativeStackScreenProps<RootStackParamList, 'Reminders'>;
 export type AddReminderScreenProps = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
-export type EditReminderScreenProps = NativeStackScreenProps<RootStackParamList, 'EditReminder'>; 
+export type EditReminderScreenProps = NativeStackScreenProps<RootStackParamList, 'EditReminder'>;
+export type CompleteReminderScreenProps = NativeStackScreenProps<RootStackParamList, 'CompleteReminder'>; 
