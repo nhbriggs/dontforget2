@@ -18,6 +18,7 @@ export type RootStackParamList = {
   };
   EditReminder: {
     reminderId: string;
+    canEdit?: boolean;
   };
 };
 

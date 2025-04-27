@@ -415,6 +415,19 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
             {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString()}
           </Text>
         </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={dueDate}
+            mode="datetime"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(Platform.OS === 'ios');
+              if (selectedDate) {
+                setDueDate(selectedDate);
+              }
+            }}
+          />
+        )}
 
         <View style={styles.recurrenceSection}>
           <View style={styles.recurrenceHeader}>

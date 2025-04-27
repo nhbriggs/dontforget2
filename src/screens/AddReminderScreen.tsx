@@ -19,6 +19,7 @@ import { db } from '../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ChecklistItem } from '../types/Reminder';
 import { Picker } from '@react-native-picker/picker';
+import NotificationService from '../services/NotificationService';
 
 interface FamilyMember {
   id: string;
@@ -264,7 +265,7 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
         createdBy: user?.id,
         createdAt: new Date(),
         dueDate,
-        status: 'pending',
+        status: 'pending' as const,
         isRecurring,
         recurrenceConfig: isRecurring ? {
           selectedDays: selectedDays,
@@ -274,7 +275,27 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
         } : null,
       };
 
-      await addDoc(collection(db, 'reminders'), reminderData);
+      // Add the reminder to Firestore
+      const docRef = await addDoc(collection(db, 'reminders'), reminderData);
+      console.log('📝 Created reminder with ID:', docRef.id);
+      console.log('📅 Reminder data:', reminderData);
+
+      // Schedule the notification
+      if (docRef.id && user?.familyId) {
+        console.log('🔔 Attempting to schedule notification for reminder:', docRef.id);
+        const notificationId = await NotificationService.scheduleReminderNotification({
+          ...reminderData,
+          id: docRef.id,
+          familyId: user.familyId,
+          createdBy: user.id || '',
+        });
+        console.log('📱 Notification scheduling result:', notificationId);
+        
+        // Check all scheduled notifications
+        const scheduledNotifications = await NotificationService.checkScheduledNotifications();
+        console.log('📋 All scheduled notifications after adding:', scheduledNotifications);
+      }
+
       navigation.goBack();
     } catch (error) {
       console.error('Error creating reminder:', error);
@@ -391,9 +412,9 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           <DateTimePicker
             value={dueDate}
             mode="datetime"
-            display="default"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
+              setShowDatePicker(Platform.OS === 'ios');
               if (selectedDate) {
                 setDueDate(selectedDate);
               }
