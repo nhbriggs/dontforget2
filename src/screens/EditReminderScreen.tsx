@@ -19,6 +19,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { ChecklistItem } from '../types/Reminder';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import NotificationService from '../services/NotificationService';
+import * as Notifications from 'expo-notifications';
 
 interface FamilyMember {
   id: string;
@@ -213,7 +215,21 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
     try {
       setLoading(true);
       const reminderRef = doc(db, 'reminders', reminderId);
-      await updateDoc(reminderRef, {
+      
+      // Get all scheduled notifications
+      const scheduledNotifications = await NotificationService.checkScheduledNotifications();
+      
+      // Find and cancel the existing notification for this reminder
+      const existingNotification = scheduledNotifications.find(
+        n => n.content.data?.reminderId === reminderId
+      );
+      if (existingNotification) {
+        console.log('🔔 Cancelling existing notification:', existingNotification.identifier);
+        await Notifications.cancelScheduledNotificationAsync(existingNotification.identifier);
+      }
+
+      // Update the reminder in Firestore
+      const updatedData = {
         title: title.trim(),
         checklist,
         assignedTo,
@@ -226,7 +242,23 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
           lastGenerated: new Date(),
         } : null,
         updatedAt: new Date(),
+      };
+      
+      await updateDoc(reminderRef, updatedData);
+      console.log('📝 Updated reminder:', reminderId);
+
+      // Schedule new notification
+      console.log('🔔 Scheduling new notification for updated reminder');
+      const notificationId = await NotificationService.scheduleReminderNotification({
+        ...updatedData,
+        id: reminderId,
+        familyId: user?.familyId || '',
+        createdBy: user?.id || '',
+        createdAt: new Date(),
+        status: 'pending',
       });
+      console.log('📱 New notification scheduled with ID:', notificationId);
+
       navigation.goBack();
     } catch (error) {
       console.error('Error updating reminder:', error);
