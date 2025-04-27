@@ -24,4 +24,6 @@ export interface Reminder {
   isRecurring: boolean;
   recurrenceConfig: RecurrenceConfig | null;
   updatedAt?: Date;
+  snoozeCount?: number;
+  lastSnoozedAt?: Date;
 } 
