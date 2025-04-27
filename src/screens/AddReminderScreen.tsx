@@ -435,6 +435,11 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
               setShowDatePicker(Platform.OS === 'ios');
               if (selectedDate) {
                 setDueDate(selectedDate);
+                // If recurring is enabled, update the selected day based on the chosen date
+                if (isRecurring) {
+                  const selectedDay = selectedDate.getDay().toString();
+                  setSelectedDays([selectedDay]);
+                }
               }
             }}
           />
@@ -447,7 +452,11 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
               value={isRecurring}
               onValueChange={(value) => {
                 setIsRecurring(value);
-                if (!value) {
+                if (value) {
+                  // When enabling recurring, select the day based on the current due date
+                  const selectedDay = dueDate.getDay().toString();
+                  setSelectedDays([selectedDay]);
+                } else {
                   setSelectedDays([]);
                   setWeekFrequency('1');
                 }
