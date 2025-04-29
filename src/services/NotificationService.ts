@@ -197,6 +197,78 @@ class NotificationService {
       return [];
     }
   }
+
+  static async sendCompletionNotification(reminder: Reminder, completedBy: string) {
+    console.log('Sending completion notification for reminder:', reminder.id);
+    const hasPermission = await this.requestPermissions();
+    if (!hasPermission) {
+      console.log('No permission to send notification');
+      return null;
+    }
+
+    try {
+      // Get the child's name who completed the reminder
+      const childDoc = await getDoc(doc(db, 'users', completedBy));
+      const childName = childDoc.exists() ? childDoc.data().displayName : 'Child';
+
+      // Get the family document to find parents
+      const familyDoc = await getDoc(doc(db, 'families', reminder.familyId));
+      if (!familyDoc.exists()) {
+        console.log('Family document not found');
+        return null;
+      }
+
+      const familyData = familyDoc.data();
+      console.log('Family data:', familyData);
+      
+      // Get parent IDs directly from the array
+      const parentIds = familyData.parentIds || [];
+      console.log('Found parent IDs:', parentIds);
+
+      if (parentIds.length === 0) {
+        console.log('No parent IDs found in family document');
+        return null;
+      }
+
+      // Send notification to each parent with a 30-second delay
+      for (const parentId of parentIds) {
+        const parentDoc = await getDoc(doc(db, 'users', parentId));
+        if (parentDoc.exists()) {
+          const parentData = parentDoc.data();
+          console.log('Sending notification to parent:', parentData.displayName);
+
+          // Calculate the delay time (30 seconds from now)
+          const now = new Date();
+          const delayTime = new Date(now.getTime() + 30000); // 30 seconds in milliseconds
+          console.log('⏰ Current time:', now.toISOString());
+          console.log('⏰ Notification scheduled for:', delayTime.toISOString());
+          console.log('⏰ Time until notification:', (delayTime.getTime() - now.getTime()) / 1000, 'seconds');
+
+          const notificationId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Reminder Completed! 🎉',
+              body: `${childName} has completed the reminder: ${reminder.title}`,
+              data: { 
+                reminderId: reminder.id,
+                type: 'completion',
+                completedBy: completedBy
+              },
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: delayTime,
+            },
+          });
+          console.log('Completion notification scheduled with ID:', notificationId);
+        } else {
+          console.log('Parent document not found for ID:', parentId);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending completion notification:', error);
+      return null;
+    }
+  }
 }
 
 export default NotificationService; 

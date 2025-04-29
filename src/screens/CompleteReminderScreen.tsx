@@ -10,12 +10,15 @@ import {
 } from 'react-native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ChecklistItem } from '../types/Reminder';
+import { ChecklistItem, Reminder } from '../types/Reminder';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CompleteReminderScreenProps } from '../types/navigation';
+import NotificationService from '../services/NotificationService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function CompleteReminderScreen({ route, navigation }: CompleteReminderScreenProps) {
   const { reminderId } = route.params;
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -75,22 +78,46 @@ export default function CompleteReminderScreen({ route, navigation }: CompleteRe
               text: 'Yes',
               style: 'default',
               onPress: async () => {
-                await updateDoc(doc(db, 'reminders', reminderId), {
+                const reminderRef = doc(db, 'reminders', reminderId);
+                await updateDoc(reminderRef, {
                   status: 'completed',
                   updatedAt: new Date(),
                   completedAt: new Date(),
                 });
+
+                // Get the reminder data to send completion notification
+                const reminderDoc = await getDoc(reminderRef);
+                if (reminderDoc.exists()) {
+                  const reminderData = reminderDoc.data();
+                  await NotificationService.sendCompletionNotification(
+                    { ...reminderData, id: reminderId } as Reminder,
+                    user?.id || ''
+                  );
+                }
+
                 navigation.goBack();
               },
             },
           ]
         );
       } else {
-        await updateDoc(doc(db, 'reminders', reminderId), {
+        const reminderRef = doc(db, 'reminders', reminderId);
+        await updateDoc(reminderRef, {
           status: 'completed',
           updatedAt: new Date(),
           completedAt: new Date(),
         });
+
+        // Get the reminder data to send completion notification
+        const reminderDoc = await getDoc(reminderRef);
+        if (reminderDoc.exists()) {
+          const reminderData = reminderDoc.data();
+          await NotificationService.sendCompletionNotification(
+            { ...reminderData, id: reminderId } as Reminder,
+            user?.id || ''
+          );
+        }
+
         navigation.goBack();
       }
     } catch (error) {
