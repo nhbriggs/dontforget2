@@ -180,6 +180,107 @@ function Navigation() {
         console.log('📝 Notification ID:', response.notification.request.identifier);
         console.log('📌 Reminder ID:', response.notification.request.content.data?.reminderId);
         console.log('==========================================\n');
+
+        // Get the reminder ID and check if it's a completion notification
+        const reminderId = response.notification.request.content.data?.reminderId;
+        const isCompletionNotification = 
+          response.notification.request.content.data?.type === 'completion' ||
+          response.notification.request.content.title?.includes('Completed!');
+
+        if (reminderId) {
+          if (isCompletionNotification) {
+            // For completion notifications, navigate directly to the completed reminder
+            // @ts-ignore - navigation type is correct but TypeScript doesn't recognize it
+            navigation.navigate('CompleteReminder', { reminderId });
+          } else {
+            // For regular reminders, show the alert with options
+            Alert.alert(
+              response.notification.request.content.title || 'Reminder',
+              response.notification.request.content.body || 'Time for your task!',
+              [
+                { 
+                  text: 'OK', 
+                  style: 'default',
+                  onPress: async () => {
+                    // Clear this notification when OK is pressed
+                    try {
+                      await Notifications.dismissNotificationAsync(response.notification.request.identifier);
+                    } catch (error) {
+                      console.log('⚠️ Could not dismiss notification:', error);
+                    }
+                    // Navigate to complete reminder screen
+                    // @ts-ignore - navigation type is correct but TypeScript doesn't recognize it
+                    navigation.navigate('CompleteReminder', { reminderId });
+                  }
+                },
+                {
+                  text: 'Snooze (1min)',
+                  style: 'default',
+                  onPress: async () => {
+                    const snoozeTime = new Date();
+                    console.log('\n⏰ ========= SNOOZE PRESSED =========');
+                    console.log('⏰ Time:', snoozeTime.toLocaleTimeString());
+                    console.log('📝 Original Notification ID:', response.notification.request.identifier);
+                    console.log('📌 Reminder ID:', reminderId);
+                    
+                    // Clear the current notification
+                    try {
+                      await Notifications.dismissNotificationAsync(response.notification.request.identifier);
+                    } catch (error) {
+                      console.log('⚠️ Could not dismiss notification:', error);
+                    }
+
+                    if (reminderId) {
+                      try {
+                        // Update snooze count in Firestore
+                        const reminderRef = doc(db, 'reminders', reminderId as string);
+                        await updateDoc(reminderRef, {
+                          snoozeCount: increment(1),
+                          lastSnoozedAt: new Date()
+                        });
+                        console.log('📊 Updated snooze count for reminder:', reminderId);
+                      } catch (error) {
+                        console.error('❌ Error updating snooze count:', error);
+                      }
+                    }
+
+                    // Cancel any scheduled instance of this notification
+                    try {
+                      await Notifications.cancelScheduledNotificationAsync(response.notification.request.identifier);
+                      console.log('🗑️ Cancelled original notification:', response.notification.request.identifier);
+                    } catch (error) {
+                      console.log('⚠️ Could not cancel notification (might already be expired):', error);
+                    }
+
+                    // Schedule a new notification 1 minute from now
+                    try {
+                      const newNotificationId = await Notifications.scheduleNotificationAsync({
+                        content: {
+                          title: response.notification.request.content.title || 'Reminder',
+                          body: response.notification.request.content.body || 'Time for your task!',
+                          data: {
+                            ...response.notification.request.content.data,
+                            isSnoozed: true  // Mark this as a snoozed notification
+                          },
+                        },
+                        trigger: {
+                          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                          seconds: 60, // 1 minute
+                        },
+                      });
+                      console.log('🆕 New snoozed notification scheduled with ID:', newNotificationId);
+                      console.log('⏰ Will trigger at:', new Date(Date.now() + 60000).toLocaleTimeString());
+                      console.log('==========================================\n');
+                    } catch (error) {
+                      console.error('❌ Error scheduling new notification:', error);
+                    }
+                  },
+                },
+              ],
+              { cancelable: false }
+            );
+          }
+        }
       });
 
       // Test notification - commented out for production

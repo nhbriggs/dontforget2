@@ -16,6 +16,7 @@ import { RemindersScreenProps } from '../types/navigation';
 import { useFocusEffect } from '@react-navigation/native';
 import { Reminder } from '../types/Reminder';
 import { MaterialCommunityIcons, Ionicons, AntDesign } from '@expo/vector-icons';
+import NotificationService from '../services/NotificationService';
 
 interface FamilyMember {
   id: string;
@@ -319,6 +320,28 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     return reminders.filter(reminder => reminder.assignedTo === selectedFilter);
   }, [selectedFilter, reminders, user]);
 
+  const testCompletionNotification = async () => {
+    if (!user || !familyMembers.length) return;
+    
+    // Create a test reminder
+    const testReminder: Reminder = {
+      id: 'test-reminder-' + Date.now(),
+      title: 'Test Notification',
+      status: 'completed',
+      createdAt: new Date(),
+      dueDate: new Date(),
+      assignedTo: familyMembers[0].id,
+      familyId: user.familyId!,
+      isRecurring: false,
+      recurrenceConfig: null,
+      checklist: [],
+      createdBy: user.id,
+    };
+
+    // Send the completion notification
+    await NotificationService.sendCompletionNotification(testReminder, familyMembers[0].id);
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -329,6 +352,14 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
 
   return (
     <View style={styles.container}>
+      {user?.role === 'parent' && (
+        <TouchableOpacity
+          style={styles.testButton}
+          onPress={testCompletionNotification}
+        >
+          <Text style={styles.testButtonText}>Test Completion Notification</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.topSection}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reminders</Text>
@@ -748,5 +779,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  testButton: {
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 8,
+    margin: 10,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 }); 

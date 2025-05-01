@@ -4,6 +4,65 @@ import { Platform } from 'react-native';
 import { Reminder } from '../types/Reminder';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { getAuth } from 'firebase/auth';
+
+// Set up notification handler at the module level
+let isNotificationHandlerSet = false;
+
+const setupNotificationHandler = () => {
+  if (isNotificationHandlerSet) {
+    console.log('📱 Notification handler already set up, skipping...');
+    return;
+  }
+
+  console.log('📱 Setting up notification handler for the first time');
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      console.log('🔍 DEBUG: Notification Handler Details:');
+      console.log('📝 Content:', JSON.stringify(notification.request.content, null, 2));
+      console.log('🏷️ Title:', notification.request.content.title);
+      console.log('📊 Data:', JSON.stringify(notification.request.content.data, null, 2));
+      
+      // Check if this is a completion notification
+      const isCompletionNotification = 
+        notification.request.content.data?.type === 'completion' || 
+        (notification.request.content.title && notification.request.content.title.includes('Completed!'));
+      
+      console.log('✨ Is completion notification?', isCompletionNotification);
+      console.log('🔎 Completion check details:');
+      console.log(' - Data type:', notification.request.content.data?.type);
+      console.log(' - Title check:', notification.request.content.title?.includes('Completed!'));
+
+      if (Platform.OS === 'ios') {
+        return {
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          ios: {
+            foregroundPresentationOptions: {
+              alert: true,
+              badge: false,
+              sound: true,
+              banner: true,
+              list: true
+            }
+          }
+        };
+      }
+
+      // For Android
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        sound: true,
+      };
+    },
+  });
+  
+  isNotificationHandlerSet = true;
+};
 
 class NotificationService {
   static async requestPermissions() {
@@ -36,16 +95,8 @@ class NotificationService {
         return false;
       }
 
-      // Set notification handler
-      console.log('Setting up notification handler');
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-        }),
-      });
+      // Set up the notification handler
+      setupNotificationHandler();
 
       return true;
     } catch (error) {
@@ -114,6 +165,7 @@ class NotificationService {
                 isRecurring: true,
                 recurrenceConfig: reminder.recurrenceConfig
               },
+              sound: true,
             },
             trigger: {
               type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -130,6 +182,7 @@ class NotificationService {
             title: `${childName} don't forget 2 ${reminder.title}`,
             body: `It's time to ${reminder.title.toLowerCase()}!`,
             data: { reminderId: reminder.id },
+            sound: true,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -211,59 +264,52 @@ class NotificationService {
       const childDoc = await getDoc(doc(db, 'users', completedBy));
       const childName = childDoc.exists() ? childDoc.data().displayName : 'Child';
 
-      // Get the family document to find parents
-      const familyDoc = await getDoc(doc(db, 'families', reminder.familyId));
-      if (!familyDoc.exists()) {
-        console.log('Family document not found');
-        return null;
-      }
-
-      const familyData = familyDoc.data();
-      console.log('Family data:', familyData);
+      // Get current user
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
       
-      // Get parent IDs directly from the array
-      const parentIds = familyData.parentIds || [];
-      console.log('Found parent IDs:', parentIds);
-
-      if (parentIds.length === 0) {
-        console.log('No parent IDs found in family document');
+      if (!currentUser) {
+        console.log('No current user found');
         return null;
       }
 
-      // Send notification to each parent with a 30-second delay
-      for (const parentId of parentIds) {
-        const parentDoc = await getDoc(doc(db, 'users', parentId));
-        if (parentDoc.exists()) {
-          const parentData = parentDoc.data();
-          console.log('Sending notification to parent:', parentData.displayName);
-
-          // Calculate the delay time (30 seconds from now)
-          const now = new Date();
-          const delayTime = new Date(now.getTime() + 30000); // 30 seconds in milliseconds
-          console.log('⏰ Current time:', now.toISOString());
-          console.log('⏰ Notification scheduled for:', delayTime.toISOString());
-          console.log('⏰ Time until notification:', (delayTime.getTime() - now.getTime()) / 1000, 'seconds');
-
-          const notificationId = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Reminder Completed! 🎉',
-              body: `${childName} has completed the reminder: ${reminder.title}`,
-              data: { 
-                reminderId: reminder.id,
-                type: 'completion',
-                completedBy: completedBy
-              },
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE,
-              date: delayTime,
-            },
-          });
-          console.log('Completion notification scheduled with ID:', notificationId);
-        } else {
-          console.log('Parent document not found for ID:', parentId);
-        }
+      // Get the current user's document
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (!userDoc.exists()) {
+        console.log('Current user document not found');
+        return null;
       }
+
+      const userData = userDoc.data();
+      console.log('Sending notification to user:', userData.displayName);
+
+      // Calculate the delay time (5 seconds from now)
+      const now = new Date();
+      const delayTime = new Date(now.getTime() + 5000); // 5 seconds in milliseconds
+      console.log('⏰ Current time:', now.toISOString());
+      console.log('⏰ Notification scheduled for:', delayTime.toISOString());
+      console.log('⏰ Time until notification:', (delayTime.getTime() - now.getTime()) / 1000, 'seconds');
+
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Reminder Completed! 🎉',
+          body: `${childName} has completed the reminder: ${reminder.title}`,
+          data: { 
+            reminderId: reminder.id,
+            type: 'completion',
+            childId: completedBy
+          },
+          priority: 'default',
+          sound: true,
+          badge: undefined
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: delayTime,
+        },
+      });
+      console.log('Completion notification scheduled with ID:', notificationId);
+      return notificationId;
     } catch (error) {
       console.error('Error sending completion notification:', error);
       return null;
