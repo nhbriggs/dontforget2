@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { collection, query, where, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Reminder } from '../types/Reminder';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 
 interface FamilyMember {
   id: string;
@@ -21,6 +24,7 @@ export default function AllCompletedRemindersScreen() {
   const [selectedTimeFilter, setSelectedTimeFilter] = useState<string | null>(null);
   const [averageSnoozes, setAverageSnoozes] = useState<number>(0);
   const [averageCompletionTime, setAverageCompletionTime] = useState<number>(0);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const getFilteredReminders = () => {
     let filtered = reminders;
@@ -148,6 +152,23 @@ export default function AllCompletedRemindersScreen() {
     setLoading(false);
   };
 
+  // Clone reminder handler
+  const handleCloneReminder = (reminder) => {
+    // Prepare checklist with all items set to not completed
+    const checklist = (reminder.checklist || []).map(item => ({ ...item, completed: false }));
+    navigation.navigate('AddReminder', {
+      cloneData: {
+        title: reminder.title,
+        checklist,
+        dueDate: new Date(),
+        assignedTo: reminder.assignedTo,
+        isRecurring: reminder.isRecurring,
+        selectedDays: reminder.recurrenceConfig?.selectedDays || [],
+        weekFrequency: reminder.recurrenceConfig?.weekFrequency || 1,
+      }
+    });
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -229,6 +250,13 @@ export default function AllCompletedRemindersScreen() {
               <MaterialCommunityIcons name="check-circle" size={20} color="#34c759" />
               <Text style={styles.title}>{item.title}</Text>
             </View>
+            {/* Clone button */}
+            <TouchableOpacity
+              style={styles.cloneButton}
+              onPress={() => handleCloneReminder(item)}
+            >
+              <MaterialCommunityIcons name="content-copy" size={20} color="#888" />
+            </TouchableOpacity>
             <View style={styles.infoRow}>
               <Text style={styles.date}>Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : 'Unknown'}</Text>
               <View style={styles.rightInfo}>
@@ -390,5 +418,11 @@ const styles = StyleSheet.create({
   },
   childFilterBar: {
     marginTop: 4,
+  },
+  cloneButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 2,
+    marginRight: 2,
+    padding: 4,
   },
 }); 
