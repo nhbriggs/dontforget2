@@ -13,16 +13,21 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
-      }
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iwontforget.app",
+      "googleServicesFile": "./ios/GoogleService-Info.plist"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "newArchEnabled": true
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ]
   }
-} 
+}

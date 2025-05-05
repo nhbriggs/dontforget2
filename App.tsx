@@ -8,6 +8,7 @@ import RemindersScreen from './src/screens/RemindersScreen';
 import AddReminderScreen from './src/screens/AddReminderScreen';
 import EditReminderScreen from './src/screens/EditReminderScreen';
 import CompleteReminderScreen from './src/screens/CompleteReminderScreen';
+import AllCompletedRemindersScreen from './src/screens/AllCompletedRemindersScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -381,6 +382,7 @@ function Navigation() {
               },
             }}
           />
+          <Stack.Screen name="AllCompletedReminders" component={AllCompletedRemindersScreen} options={{ title: 'Completed Reminders' }} />
         </>
       ) : (
         // No user is signed in

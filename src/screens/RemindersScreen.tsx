@@ -363,6 +363,13 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       <View style={styles.topSection}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reminders</Text>
+          <TouchableOpacity
+            style={styles.completedButton}
+            onPress={() => navigation.navigate('AllCompletedReminders')}
+          >
+            <MaterialCommunityIcons name="check-all" size={22} color="#34c759" />
+            <Text style={styles.completedButtonText}>Completed</Text>
+          </TouchableOpacity>
         </View>
 
         {familyMembers.length > 0 && (
@@ -515,8 +522,14 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                     item.status === 'completed' && styles.statusCompleted,
                     item.status === 'verified' && styles.statusVerified
                   ]}>
-                    {' '}{item.status}
+                    {' '}
+                    {item.status === 'completed'
+                      ? `completed (${item.snoozeCount && item.snoozeCount > 0 ? `snoozed ${item.snoozeCount} times` : 'no snoozes'})`
+                      : item.status}
                   </Text>
+                  {item.status === 'completed' && (!item.snoozeCount || item.snoozeCount === 0) && (
+                    <MaterialCommunityIcons name="star" size={16} color="#FFD700" style={{ marginLeft: 4 }} />
+                  )}
                 </View>
                 {item.checklist && item.checklist.length > 0 && (
                   <View style={styles.checklistContainer}>
@@ -790,5 +803,18 @@ const styles = StyleSheet.create({
   testButtonText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  completedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e6f9ec',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  completedButtonText: {
+    color: '#34c759',
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 }); 

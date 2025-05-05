@@ -23,6 +23,7 @@ export type RootStackParamList = {
   CompleteReminder: {
     reminderId: string;
   };
+  AllCompletedReminders: undefined;
 };
 
 export type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;

@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getAuth } from 'firebase/auth';
 
-// Set up notification handler at the module level
+// Queue for reminder due notifications
 let isNotificationHandlerSet = false;
 
 const setupNotificationHandler = () => {
@@ -18,26 +18,70 @@ const setupNotificationHandler = () => {
   console.log('📱 Setting up notification handler for the first time');
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-      console.log('🔍 DEBUG: Notification Handler Details:');
-      console.log('📝 Content:', JSON.stringify(notification.request.content, null, 2));
-      console.log('🏷️ Title:', notification.request.content.title);
-      console.log('📊 Data:', JSON.stringify(notification.request.content.data, null, 2));
-      
-      // Check if this is a completion notification
-      const isCompletionNotification = 
-        notification.request.content.data?.type === 'completion' || 
-        (notification.request.content.title && notification.request.content.title.includes('Completed!'));
-      
-      console.log('✨ Is completion notification?', isCompletionNotification);
-      console.log('🔎 Completion check details:');
-      console.log(' - Data type:', notification.request.content.data?.type);
-      console.log(' - Title check:', notification.request.content.title?.includes('Completed!'));
+      // Define blocking configuration
+      const blockNotification = {
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        priority: Notifications.AndroidNotificationPriority.MIN,
+        ios: {
+          foregroundPresentationOptions: {
+            alert: false,
+            badge: false,
+            sound: false,
+            banner: false,
+            list: false
+          }
+        }
+      };
 
-      if (Platform.OS === 'ios') {
+      // Get current user's role first, before any other processing
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        console.log('No current user, blocking notification');
+        return blockNotification;
+      }
+
+      try {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userDoc.exists()) {
+          console.log('User document not found, blocking notification');
+          return blockNotification;
+        }
+
+        const userRole = userDoc.data().role;
+        const notificationType = notification.request.content.data?.type;
+        
+        console.log('Current user role:', userRole);
+        console.log('Notification type:', notificationType);
+
+        // Strict role-based blocking
+        if (userRole === 'child' && notificationType === 'completion') {
+          console.log('❌ Child user, blocking completion notification');
+          return blockNotification;
+        }
+
+        if (userRole === 'parent' && notificationType !== 'completion') {
+          console.log('❌ Parent user, blocking due notification');
+          return blockNotification;
+        }
+
+        // Only if we pass all checks, then proceed with showing the notification
+        console.log('\n🔔 ========= NOTIFICATION APPROVED =========');
+        console.log('⏰ Time:', new Date().toLocaleTimeString());
+        console.log('📝 Notification ID:', notification.request.identifier);
+        console.log('📌 Reminder ID:', notification.request.content.data?.reminderId);
+        console.log('🏷️ Title:', notification.request.content.title);
+        console.log('📅 Trigger:', JSON.stringify(notification.request.trigger));
+        console.log('==========================================\n');
+
         return {
           shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: false,
+          priority: Notifications.AndroidNotificationPriority.DEFAULT,
           ios: {
             foregroundPresentationOptions: {
               alert: true,
@@ -48,23 +92,51 @@ const setupNotificationHandler = () => {
             }
           }
         };
+      } catch (error) {
+        console.error('Error in notification handler:', error);
+        return blockNotification;
       }
-
-      // For Android
-      return {
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        priority: Notifications.AndroidNotificationPriority.DEFAULT,
-        sound: true,
-      };
     },
   });
   
   isNotificationHandlerSet = true;
 };
 
+// Helper function for default notification behavior
+const defaultNotificationBehavior = () => {
+  if (Platform.OS === 'ios') {
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      ios: {
+        foregroundPresentationOptions: {
+          alert: true,
+          badge: false,
+          sound: true,
+          banner: true,
+          list: true
+        }
+      }
+    };
+  }
+
+  // For Android
+  return {
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    priority: Notifications.AndroidNotificationPriority.DEFAULT,
+    sound: true,
+  };
+};
+
 class NotificationService {
+  // Queue for reminder due notifications
+  private static dueReminderQueue: Map<string, Notifications.NotificationRequestInput> = new Map();
+  // Queue for completion notifications
+  private static completionQueue: Map<string, Notifications.NotificationRequestInput> = new Map();
+
   static async requestPermissions() {
     console.log('Requesting notification permissions...');
     if (!Device.isDevice) {
@@ -113,123 +185,214 @@ class NotificationService {
       return null;
     }
 
-    // Ensure dates are proper Date objects
-    const dueDate = reminder.dueDate instanceof Date ? reminder.dueDate : new Date(reminder.dueDate);
-    console.log('📅 Original due date:', reminder.dueDate);
-    console.log('📅 Converted due date:', dueDate);
-
-    // Check if the due date is in the past
-    const now = new Date();
-    console.log('⏰ Current time:', now.toISOString());
-    console.log('📅 Reminder due date:', dueDate.toISOString());
-    
-    if (dueDate < now) {
-      console.log('⚠️ Due date is in the past, skipping notification');
-      return null;
-    }
-
-    // Get the assigned child's display name from Firestore
-    console.log('👤 Getting child name for:', reminder.assignedTo);
-    const userDoc = await getDoc(doc(db, 'users', reminder.assignedTo));
-    const childName = userDoc.exists() ? userDoc.data().displayName : 'Child';
-    console.log('👶 Child name:', childName);
-
-    // Schedule the notification
     try {
-      console.log('🔔 Attempting to schedule notification for:', dueDate.toISOString());
-      
-      // For recurring reminders, schedule the next occurrence
-      if (reminder.isRecurring && reminder.recurrenceConfig) {
-        const { selectedDays, weekFrequency } = reminder.recurrenceConfig;
-        const startDate = reminder.recurrenceConfig.startDate instanceof Date ? 
-          reminder.recurrenceConfig.startDate : 
-          new Date(reminder.recurrenceConfig.startDate);
-
-        console.log('🔄 Recurring reminder config:', {
-          selectedDays,
-          weekFrequency,
-          startDate: startDate.toISOString()
-        });
-        
-        // Find the next occurrence based on the recurrence pattern
-        const nextDate = this.getNextOccurrence(startDate, selectedDays, weekFrequency);
-        console.log('📅 Next occurrence date:', nextDate.toISOString());
-        
-        if (nextDate > now) {
-          const notificationId = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: `${childName} don't forget 2 ${reminder.title}`,
-              body: `It's time to ${reminder.title.toLowerCase()}!`,
-              data: { 
-                reminderId: reminder.id,
-                isRecurring: true,
-                recurrenceConfig: reminder.recurrenceConfig
-              },
-              sound: true,
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE,
-              date: nextDate,
-            },
-          });
-          console.log('🔔 Recurring notification scheduled with ID:', notificationId);
-          return notificationId;
-        }
-      } else {
-        // One-time notification
-        const notificationId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `${childName} don't forget 2 ${reminder.title}`,
-            body: `It's time to ${reminder.title.toLowerCase()}!`,
-            data: { reminderId: reminder.id },
-            sound: true,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: dueDate,
-          },
-        });
-        console.log('🔔 One-time notification scheduled with ID:', notificationId);
-        return notificationId;
+      // Get the creator's role and family ID
+      const creatorDoc = await getDoc(doc(db, 'users', reminder.createdBy));
+      if (!creatorDoc.exists()) {
+        console.log('Creator document not found');
+        return null;
       }
+      const creatorData = creatorDoc.data();
+      const creatorRole = creatorData.role;
+      const creatorFamilyId = creatorData.familyId;
+      console.log('👤 Reminder creator role:', creatorRole);
+      console.log('👨‍👩‍👧‍👦 Family ID:', creatorFamilyId);
+
+      // Verify family ID matches the reminder
+      if (creatorFamilyId !== reminder.familyId) {
+        console.log('❌ Family ID mismatch, skipping notification');
+        return null;
+      }
+
+      // For parent-created reminders: notify the assigned child
+      // For child-created reminders: notify the child who created it
+      const recipientId = creatorRole === 'parent' ? reminder.assignedTo : reminder.createdBy;
+      
+      // Get the recipient's name and verify family ID
+      const recipientDoc = await getDoc(doc(db, 'users', recipientId));
+      if (!recipientDoc.exists()) {
+        console.log('Recipient document not found');
+        return null;
+      }
+      const recipientData = recipientDoc.data();
+      if (recipientData.familyId !== reminder.familyId) {
+        console.log('❌ Recipient family ID mismatch, skipping notification');
+        return null;
+      }
+      const recipientName = recipientData.displayName || 'User';
+      console.log('👤 Notification recipient:', recipientName);
+
+      // Ensure dates are proper Date objects
+      const dueDate = reminder.dueDate instanceof Date ? reminder.dueDate : new Date(reminder.dueDate);
+      
+      // Check if the due date is in the past
+      const now = new Date();
+      if (dueDate < now) {
+        console.log('⚠️ Due date is in the past, skipping notification');
+        return null;
+      }
+
+      // Create the notification request for due reminder
+      const notificationContent = {
+        title: `${recipientName} don't forget 2 ${reminder.title}`,
+        subtitle: null,
+        body: `It's time to ${reminder.title.toLowerCase()}!`,
+        data: { 
+          reminderId: reminder.id,
+          createdBy: reminder.createdBy,
+          creatorRole: creatorRole,
+          familyId: reminder.familyId,
+          type: 'due'
+        },
+        sound: 'default' as const,
+      };
+
+      // Add to due reminder queue
+      this.dueReminderQueue.set(reminder.id, { 
+        content: notificationContent, 
+        trigger: { 
+          type: Notifications.SchedulableTriggerInputTypes.DATE as const,
+          date: dueDate 
+        } 
+      });
+      console.log('📝 Added to due reminder queue:', reminder.id);
+
+      // Schedule the notification
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: notificationContent,
+        trigger: { 
+          type: Notifications.SchedulableTriggerInputTypes.DATE as const,
+          date: dueDate,
+        },
+      });
+      console.log('🔔 Notification scheduled with ID:', notificationId);
+      return notificationId;
     } catch (error) {
       console.error('Error scheduling notification:', error);
       return null;
     }
   }
 
-  private static getNextOccurrence(startDate: Date, selectedDays: string[], weekFrequency: number): Date {
-    const today = new Date();
-    today.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
-    
-    // If start date is in the future, and its day is selected, return it
-    if (startDate > today && selectedDays.includes(startDate.getDay().toString())) {
-      return startDate;
+  static async sendCompletionNotification(reminder: Reminder, completedBy: string) {
+    console.log('Sending completion notification for reminder:', reminder.id);
+    const hasPermission = await this.requestPermissions();
+    if (!hasPermission) {
+      console.log('No permission to send notification');
+      return null;
     }
 
-    // Find the next occurrence
-    let nextDate = new Date(today);
-    let daysChecked = 0;
-    const maxDays = 7 * weekFrequency * 2; // Look ahead maximum 2 cycles
-
-    while (daysChecked < maxDays) {
-      nextDate.setDate(nextDate.getDate() + 1);
-      const dayOfWeek = nextDate.getDay().toString();
-      
-      if (selectedDays.includes(dayOfWeek)) {
-        // Check if this occurrence aligns with the week frequency
-        const weeksSinceStart = Math.floor(
-          (nextDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)
-        );
-        if (weeksSinceStart % weekFrequency === 0) {
-          nextDate.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
-          return nextDate;
-        }
+    try {
+      // Get the creator's role and family ID
+      const creatorDoc = await getDoc(doc(db, 'users', reminder.createdBy));
+      if (!creatorDoc.exists()) {
+        console.log('Creator document not found');
+        return null;
       }
-      daysChecked++;
-    }
+      const creatorData = creatorDoc.data();
+      const creatorRole = creatorData.role;
+      const creatorFamilyId = creatorData.familyId;
+      console.log('👤 Reminder creator role:', creatorRole);
+      console.log('👨‍👩‍👧‍👦 Family ID:', creatorFamilyId);
 
-    return nextDate; // Fallback, should rarely happen
+      // Verify family ID matches the reminder
+      if (creatorFamilyId !== reminder.familyId) {
+        console.log('❌ Family ID mismatch, skipping notification');
+        return null;
+      }
+
+      // Only send completion notifications for parent-created reminders
+      if (creatorRole !== 'parent') {
+        console.log('📱 Skipping completion notification for child-created reminder');
+        return null;
+      }
+
+      // Get the completer's name and verify family ID
+      const completerDoc = await getDoc(doc(db, 'users', completedBy));
+      if (!completerDoc.exists()) {
+        console.log('Completer document not found');
+        return null;
+      }
+      const completerData = completerDoc.data();
+      if (completerData.familyId !== reminder.familyId) {
+        console.log('❌ Completer family ID mismatch, skipping notification');
+        return null;
+      }
+      const completerName = completerData.displayName || 'User';
+
+      // Get the family document to find all parents
+      const familyDoc = await getDoc(doc(db, 'families', reminder.familyId));
+      if (!familyDoc.exists()) {
+        console.log('Family document not found');
+        return null;
+      }
+
+      const familyData = familyDoc.data();
+      const parentIds = familyData.parentIds || [];
+      console.log('👥 Found parent IDs:', parentIds);
+
+      // Calculate the delay time (30 seconds from now)
+      const now = new Date();
+      const delayTime = new Date(now.getTime() + 30000); // 30 seconds in milliseconds
+      console.log('⏰ Scheduling completion notification for:', delayTime.toISOString());
+
+      // Create completion notification content
+      const notificationContent = {
+        title: 'Reminder Completed! 🎉',
+        subtitle: null,
+        body: `${completerName} has completed the reminder: ${reminder.title}`,
+        data: { 
+          reminderId: reminder.id,
+          type: 'completion',
+          completedBy: completedBy,
+          createdBy: reminder.createdBy,
+          familyId: reminder.familyId
+        },
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        sound: 'default' as const,
+      };
+
+      // Add to completion queue
+      this.completionQueue.set(reminder.id, { 
+        content: notificationContent, 
+        trigger: { 
+          type: Notifications.SchedulableTriggerInputTypes.DATE as const,
+          date: delayTime 
+        } 
+      });
+      console.log('📝 Added to completion queue:', reminder.id);
+
+      // Schedule notification for all parents in this family
+      const notificationPromises = parentIds.map(async (parentId) => {
+        // Verify each parent is still in this family
+        const parentDoc = await getDoc(doc(db, 'users', parentId));
+        if (!parentDoc.exists()) {
+          console.log(`Parent ${parentId} document not found`);
+          return null;
+        }
+        const parentData = parentDoc.data();
+        if (parentData.familyId !== reminder.familyId) {
+          console.log(`Parent ${parentId} is no longer in this family, skipping notification`);
+          return null;
+        }
+
+        const notificationId = await Notifications.scheduleNotificationAsync({
+          content: notificationContent,
+          trigger: { 
+            type: Notifications.SchedulableTriggerInputTypes.DATE as const,
+            date: delayTime,
+          },
+        });
+        console.log(`Completion notification scheduled for parent ${parentId} with ID:`, notificationId);
+        return notificationId;
+      });
+
+      const notificationIds = await Promise.all(notificationPromises);
+      console.log('All completion notifications scheduled:', notificationIds.filter(Boolean));
+      return notificationIds[0]; // Return the first successful notification ID
+    } catch (error) {
+      console.error('Error sending completion notification:', error);
+      return null;
+    }
   }
 
   // Add a method to check scheduled notifications
@@ -248,71 +411,6 @@ class NotificationService {
     } catch (error) {
       console.error('Error checking scheduled notifications:', error);
       return [];
-    }
-  }
-
-  static async sendCompletionNotification(reminder: Reminder, completedBy: string) {
-    console.log('Sending completion notification for reminder:', reminder.id);
-    const hasPermission = await this.requestPermissions();
-    if (!hasPermission) {
-      console.log('No permission to send notification');
-      return null;
-    }
-
-    try {
-      // Get the child's name who completed the reminder
-      const childDoc = await getDoc(doc(db, 'users', completedBy));
-      const childName = childDoc.exists() ? childDoc.data().displayName : 'Child';
-
-      // Get current user
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
-      
-      if (!currentUser) {
-        console.log('No current user found');
-        return null;
-      }
-
-      // Get the current user's document
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      if (!userDoc.exists()) {
-        console.log('Current user document not found');
-        return null;
-      }
-
-      const userData = userDoc.data();
-      console.log('Sending notification to user:', userData.displayName);
-
-      // Calculate the delay time (5 seconds from now)
-      const now = new Date();
-      const delayTime = new Date(now.getTime() + 5000); // 5 seconds in milliseconds
-      console.log('⏰ Current time:', now.toISOString());
-      console.log('⏰ Notification scheduled for:', delayTime.toISOString());
-      console.log('⏰ Time until notification:', (delayTime.getTime() - now.getTime()) / 1000, 'seconds');
-
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Reminder Completed! 🎉',
-          body: `${childName} has completed the reminder: ${reminder.title}`,
-          data: { 
-            reminderId: reminder.id,
-            type: 'completion',
-            childId: completedBy
-          },
-          priority: 'default',
-          sound: true,
-          badge: undefined
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: delayTime,
-        },
-      });
-      console.log('Completion notification scheduled with ID:', notificationId);
-      return notificationId;
-    } catch (error) {
-      console.error('Error sending completion notification:', error);
-      return null;
     }
   }
 }
