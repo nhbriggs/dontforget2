@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { FamilyService } from '../services/FamilyService';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -13,8 +13,23 @@ export default function JoinFamilyScreen() {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regRepeatPassword, setRegRepeatPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [joinError, setJoinError] = useState('');
   const navigation = useNavigation();
+
+  // Live password match validation
+  useEffect(() => {
+    if (regPassword && regRepeatPassword) {
+      if (regPassword !== regRepeatPassword) {
+        setPasswordError('Passwords do not match.');
+      } else {
+        setPasswordError('');
+      }
+    } else {
+      setPasswordError('');
+    }
+  }, [regPassword, regRepeatPassword]);
 
   const handleValidate = async () => {
     if (!code.trim() || !familyName.trim()) {
@@ -42,8 +57,12 @@ export default function JoinFamilyScreen() {
   };
 
   const handleRegister = async () => {
-    if (!regName.trim() || !regEmail.trim() || !regPassword.trim()) {
+    if (!regName.trim() || !regEmail.trim() || !regPassword.trim() || !regRepeatPassword.trim()) {
       Alert.alert('Error', 'Please fill in all fields.');
+      return;
+    }
+    if (regPassword !== regRepeatPassword) {
+      setPasswordError('Passwords do not match.');
       return;
     }
     setIsLoading(true);
@@ -133,16 +152,25 @@ export default function JoinFamilyScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder="Create a Password"
             value={regPassword}
             onChangeText={setRegPassword}
             secureTextEntry
             editable={!isLoading}
           />
+          <TextInput
+            style={[styles.input, passwordError ? styles.inputError : null]}
+            placeholder="Confirm Password"
+            value={regRepeatPassword}
+            onChangeText={setRegRepeatPassword}
+            secureTextEntry
+            editable={!isLoading}
+          />
+          {passwordError ? <Text style={styles.error}>{passwordError}</Text> : null}
           <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
+            style={[styles.button, (isLoading || !!passwordError) && styles.buttonDisabled]}
             onPress={handleRegister}
-            disabled={isLoading}
+            disabled={isLoading || !!passwordError}
           >
             {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
           </TouchableOpacity>
@@ -201,5 +229,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  inputError: {
+    borderColor: '#ffb3b3',
+    backgroundColor: '#fff0f0',
   },
 }); 

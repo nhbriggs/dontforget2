@@ -89,18 +89,14 @@ export default function SignInScreen() {
           editable={!isLoading}
         />
 
-        <TouchableOpacity 
-          style={[styles.button, isLoading && styles.buttonDisabled]}
+        <TouchableOpacity
+          style={styles.signInButton}
           onPress={handleSignIn}
           disabled={isLoading}
         >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
+          {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signInButtonText}>Sign In</Text>}
         </TouchableOpacity>
-
+        <Text style={styles.orText}>or get started by ...</Text>
         <TouchableOpacity
           style={styles.joinFamilyButton}
           onPress={() => navigation.navigate('JoinFamily')}
@@ -172,5 +168,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  signInButton: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  signInButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  orText: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 15,
+    marginVertical: 16,
+    fontWeight: '500',
   },
 }); 

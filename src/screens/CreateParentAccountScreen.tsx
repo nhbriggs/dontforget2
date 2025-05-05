@@ -117,7 +117,7 @@ export default function CreateParentAccountScreen() {
       />
       <TextInput
         style={[styles.input, error === 'Passwords do not match.' ? styles.inputError : null]}
-        placeholder="Password"
+        placeholder="Create a Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
