@@ -3,8 +3,7 @@ export interface Family {
   name: string;
   createdAt: Date;
   createdBy: string; // User ID of the admin parent
-  adminIds: string[]; // Array of parent user IDs who can manage the family
-  parentIds?: string[]; // Backward compatibility: some families may use parentIds
+  parentIds: string[]; // Array of parent user IDs
   childrenIds: string[]; // Array of child user IDs
   joinCodes?: {
     code: string;

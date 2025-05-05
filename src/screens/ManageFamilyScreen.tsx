@@ -56,7 +56,7 @@ export default function ManageFamilyScreen() {
 
   const fetchMemberProfiles = async () => {
     if (!family) return;
-    const parentIds = family.adminIds || family.parentIds || [];
+    const parentIds = family.parentIds || [];
     const childIds = family.childrenIds || [];
     try {
       // Fetch parent profiles by document ID
@@ -140,7 +140,7 @@ export default function ManageFamilyScreen() {
   return (
     <ScrollView style={styles.container}>
       {/* Only show Invite Members if user is a parent/admin */}
-      {((user?.role === 'parent') || (user?.id && (family.adminIds || family.parentIds || []).includes(user.id))) && (
+      {((user?.role === 'parent') || (user?.id && (family.parentIds || []).includes(user.id))) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Invite Members</Text>
           <Text style={styles.sectionDescription}>
@@ -174,7 +174,7 @@ export default function ManageFamilyScreen() {
         <View style={styles.membersList}>
           <View style={styles.memberGroup}>
             <Text style={styles.memberGroupTitle}>Parents</Text>
-            {(parentProfiles.length > 0 ? parentProfiles : (family.adminIds || family.parentIds || [])).map(parent => (
+            {(parentProfiles.length > 0 ? parentProfiles : (family.parentIds || [])).map(parent => (
               <View key={typeof parent === 'string' ? parent : parent.id} style={styles.memberItem}>
                 <MaterialCommunityIcons name="account" size={20} color="#666" />
                 <Text style={styles.memberName}>{typeof parent === 'string' ? parent : parent.displayName || parent.email || parent.id}</Text>

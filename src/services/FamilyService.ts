@@ -16,7 +16,7 @@ export class FamilyService {
       name,
       createdAt: new Date(),
       createdBy: adminId,
-      adminIds: [adminId],
+      parentIds: [adminId],
       childrenIds: [],
       joinCodes: []
     };
@@ -101,7 +101,7 @@ export class FamilyService {
     const updates: any = {};
 
     if (joinCode.type === 'parent') {
-      updates.adminIds = arrayUnion(userId);
+      updates.parentIds = arrayUnion(userId);
     } else {
       updates.childrenIds = arrayUnion(userId);
     }
@@ -132,7 +132,7 @@ export class FamilyService {
     const familiesRef = collection(db, 'families');
     const q = query(
       familiesRef,
-      where('adminIds', 'array-contains', userId)
+      where('parentIds', 'array-contains', userId)
     );
     
     const querySnapshot = await getDocs(q);
