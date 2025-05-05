@@ -24,6 +24,9 @@ export type RootStackParamList = {
     reminderId: string;
   };
   AllCompletedReminders: undefined;
+  ManageFamily: undefined;
+  JoinFamily: undefined;
+  CreateParentAccount: undefined;
 };
 
 export type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;

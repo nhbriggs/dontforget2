@@ -87,6 +87,21 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     }, [user])
   );
 
+  // Redirect new parents with no children to ManageFamily
+  useEffect(() => {
+    const checkFamilyChildren = async () => {
+      if (user?.role === 'parent' && user.familyId) {
+        const familyRef = doc(db, 'families', user.familyId);
+        const familySnapshot = await getDoc(familyRef);
+        const familyData = familySnapshot.data();
+        if (familyData && (!familyData.childrenIds || familyData.childrenIds.length === 0)) {
+          navigation.navigate('ManageFamily');
+        }
+      }
+    };
+    checkFamilyChildren();
+  }, [user]);
+
   const loadFamilyMembers = async () => {
     if (!user?.familyId) return;
 
@@ -138,6 +153,14 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
         const familySnapshot = await getDoc(familyRef);
         const familyData = familySnapshot.data();
         const childrenIds = familyData?.childrenIds || [];
+
+        // Prevent Firestore 'in' filter error: skip query if childrenIds is empty
+        if (!childrenIds.length) {
+          setReminders([]);
+          setAssigneeNames({});
+          setLoading(false);
+          return;
+        }
 
         // We need to make two separate queries since Firestore doesn't support OR conditions
         const createdByChildrenQuery = query(
@@ -511,25 +534,19 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                 )}
                 <View style={styles.reminderField}>
                   <Ionicons 
-                    name={item.status === 'completed' ? 'checkmark-circle' : 
-                          item.status === 'verified' ? 'shield-checkmark' : 'hourglass-outline'} 
+                    name={item.status === 'completed' ? 'checkmark-circle' : 'hourglass-outline'} 
                     size={16} 
-                    color={item.status === 'completed' ? '#34c759' : 
-                          item.status === 'verified' ? '#007aff' : '#999'} 
+                    color={item.status === 'completed' ? '#34c759' : '#999'} 
                   />
                   <Text style={[
                     styles.reminderStatus,
-                    item.status === 'completed' && styles.statusCompleted,
-                    item.status === 'verified' && styles.statusVerified
+                    item.status === 'completed' && styles.statusCompleted
                   ]}>
                     {' '}
                     {item.status === 'completed'
                       ? `completed (${item.snoozeCount && item.snoozeCount > 0 ? `snoozed ${item.snoozeCount} times` : 'no snoozes'})`
                       : item.status}
                   </Text>
-                  {item.status === 'completed' && (!item.snoozeCount || item.snoozeCount === 0) && (
-                    <MaterialCommunityIcons name="star" size={16} color="#FFD700" style={{ marginLeft: 4 }} />
-                  )}
                 </View>
                 {item.checklist && item.checklist.length > 0 && (
                   <View style={styles.checklistContainer}>
@@ -685,9 +702,6 @@ const styles = StyleSheet.create({
   },
   statusCompleted: {
     color: '#34c759',
-  },
-  statusVerified: {
-    color: '#007aff',
   },
   deleteButton: {
     padding: 8,

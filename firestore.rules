@@ -25,6 +25,11 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    // Allow all reads and writes to testWrites collection (for testing)
+    match /testWrites/{docId} {
+      allow read, write: if true;
+    }
+
     // Families collection
     match /families/{familyId} {
       allow read: if true;

@@ -9,6 +9,9 @@ import AddReminderScreen from './src/screens/AddReminderScreen';
 import EditReminderScreen from './src/screens/EditReminderScreen';
 import CompleteReminderScreen from './src/screens/CompleteReminderScreen';
 import AllCompletedRemindersScreen from './src/screens/AllCompletedRemindersScreen';
+import ManageFamilyScreen from './src/screens/ManageFamilyScreen';
+import JoinFamilyScreen from './src/screens/JoinFamilyScreen';
+import CreateParentAccountScreen from './src/screens/CreateParentAccountScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,6 +22,7 @@ import NotificationService from './src/services/NotificationService';
 import * as Notifications from 'expo-notifications';
 import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from './src/config/firebase';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 // Configure notifications to show when app is foregrounded
 Notifications.setNotificationHandler({
@@ -32,10 +36,12 @@ Notifications.setNotificationHandler({
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+type NavigationProp = StackNavigationProp<RootStackParamList>;
+
 function Navigation() {
   const { user, loading, signOut } = useAuth();
   const handledNotifications = useRef(new Set());
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
 
   useEffect(() => {
     const setupNotifications = async () => {
@@ -337,9 +343,17 @@ function Navigation() {
                 fontWeight: 'bold',
               },
               headerRight: () => (
-                <TouchableOpacity onPress={signOut} style={{ marginRight: 10 }}>
-                  <MaterialIcons name="logout" size={24} color="black" />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity 
+                    onPress={() => navigation.navigate('ManageFamily')} 
+                    style={{ marginRight: 16 }}
+                  >
+                    <MaterialIcons name="people" size={24} color="black" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={signOut} style={{ marginRight: 10 }}>
+                    <MaterialIcons name="logout" size={24} color="black" />
+                  </TouchableOpacity>
+                </View>
               ),
             }}
           />
@@ -383,6 +397,19 @@ function Navigation() {
             }}
           />
           <Stack.Screen name="AllCompletedReminders" component={AllCompletedRemindersScreen} options={{ title: 'Completed Reminders' }} />
+          <Stack.Screen 
+            name="ManageFamily" 
+            component={ManageFamilyScreen}
+            options={{
+              title: 'Manage Family',
+              headerStyle: {
+                backgroundColor: '#fff',
+              },
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+            }}
+          />
         </>
       ) : (
         // No user is signed in
@@ -399,6 +426,28 @@ function Navigation() {
             component={SignUpScreen}
             options={{
               headerShown: false
+            }}
+          />
+          <Stack.Screen
+            name="JoinFamily"
+            component={JoinFamilyScreen}
+            options={{
+              title: 'Join Family',
+              headerStyle: {
+                backgroundColor: '#fff',
+              },
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+            }}
+          />
+          <Stack.Screen
+            name="CreateParentAccount"
+            component={CreateParentAccountScreen}
+            options={{
+              title: 'Create Family',
+              headerStyle: { backgroundColor: '#fff' },
+              headerTitleStyle: { fontWeight: 'bold' },
             }}
           />
         </>

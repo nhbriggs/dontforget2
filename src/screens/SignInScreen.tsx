@@ -11,6 +11,9 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -19,6 +22,7 @@ export default function SignInScreen() {
   const [error, setError] = useState('');
   
   const { signIn } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -43,6 +47,8 @@ export default function SignInScreen() {
         errorMessage = 'Invalid email address';
       } else if (err.code === 'auth/too-many-requests') {
         errorMessage = 'Too many failed attempts. Please try again later';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already registered. Please use a different email or sign in.';
       }
       
       setError(errorMessage);
@@ -94,6 +100,19 @@ export default function SignInScreen() {
             <Text style={styles.buttonText}>Sign In</Text>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.joinFamilyButton}
+          onPress={() => navigation.navigate('JoinFamily')}
+        >
+          <Text style={styles.joinFamilyButtonText}>Join Family</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.joinFamilyButton, { backgroundColor: '#FFA500', marginTop: 12 }]}
+          onPress={() => navigation.navigate('CreateParentAccount')}
+        >
+          <Text style={styles.joinFamilyButtonText}>Create Family</Text>
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
@@ -141,5 +160,17 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     marginBottom: 15,
     textAlign: 'center',
+  },
+  joinFamilyButton: {
+    marginTop: 24,
+    backgroundColor: '#34C759',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  joinFamilyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 }); 

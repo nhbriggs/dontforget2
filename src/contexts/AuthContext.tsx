@@ -30,12 +30,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'No user');
       if (firebaseUser) {
         try {
-          // Get additional user data from Firestore
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          const userData = userDoc.data();
-          
-          console.log('User data from Firestore:', userData);
-          
+          // Helper to poll for user doc
+          const pollUserDoc = async (retries = 5, delay = 500): Promise<any | null> => {
+            for (let i = 0; i < retries; i++) {
+              const userDocRef = doc(db, 'users', firebaseUser.uid);
+              const userDoc = await getDoc(userDocRef);
+              const userData = userDoc.data();
+              if (userData) return userData;
+              console.log(`User doc not found, retrying (${i + 1}/${retries})...`);
+              await new Promise(res => setTimeout(res, delay));
+            }
+            return null;
+          };
+
+          // Get additional user data from Firestore (with polling)
+          console.log('Fetching user doc for UID:', firebaseUser.uid);
+          const userData = await pollUserDoc();
+          console.log('User data from Firestore (with polling):', userData);
           if (userData) {
             const newUser = {
               id: firebaseUser.uid,
@@ -46,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
             setUser(newUser);
           } else {
-            console.log('No user data found in Firestore');
+            console.error('User data not found in Firestore after polling.');
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
