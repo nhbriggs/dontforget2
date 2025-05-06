@@ -58,9 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(newUser);
           } else {
             console.error('User data not found in Firestore after polling.');
+            await firebaseSignOut(auth);
+            setUser(null);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
+          await firebaseSignOut(auth);
+          setUser(null);
         }
       } else {
         setUser(null);
@@ -97,6 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
       console.log('Sign in successful:', result.user.uid);
+      // Fetch user doc from Firestore
+      const userDocRef = doc(db, 'users', result.user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      if (!userData) {
+        await firebaseSignOut(auth);
+        throw new Error('Your account is no longer active. Please contact a parent to be re-invited or create a new account.');
+      }
+      if (!userData.familyId) {
+        await firebaseSignOut(auth);
+        throw new Error('Your account is not linked to a family. Please ask a parent of the family to invite you.');
+      }
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;

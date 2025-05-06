@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "dev": "dontforget2",
+    "default": "dontforget2"
+  },
+  "targets": {},
+  "etags": {}
+}

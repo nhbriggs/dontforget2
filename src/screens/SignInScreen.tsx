@@ -52,6 +52,8 @@ export default function SignInScreen() {
         errorMessage = 'Too many failed attempts. Please try again later';
       } else if (err.code === 'auth/email-already-in-use') {
         errorMessage = 'This email is already registered. Please use a different email or sign in.';
+      } else if (err.message) {
+        errorMessage = err.message;
       }
       
       setError(errorMessage);
