@@ -12,6 +12,7 @@ import AllCompletedRemindersScreen from './src/screens/AllCompletedRemindersScre
 import ManageFamilyScreen from './src/screens/ManageFamilyScreen';
 import JoinFamilyScreen from './src/screens/JoinFamilyScreen';
 import CreateParentAccountScreen from './src/screens/CreateParentAccountScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -350,6 +351,12 @@ function Navigation() {
                   >
                     <MaterialIcons name="people" size={24} color="black" />
                   </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => navigation.navigate('Settings')} 
+                    style={{ marginRight: 16 }}
+                  >
+                    <MaterialIcons name="settings" size={24} color="black" />
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={signOut} style={{ marginRight: 10 }}>
                     <MaterialIcons name="logout" size={24} color="black" />
                   </TouchableOpacity>
@@ -402,6 +409,19 @@ function Navigation() {
             component={ManageFamilyScreen}
             options={{
               title: 'Manage Family',
+              headerStyle: {
+                backgroundColor: '#fff',
+              },
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+            }}
+          />
+          <Stack.Screen 
+            name="Settings" 
+            component={SettingsScreen}
+            options={{
+              title: 'Settings',
               headerStyle: {
                 backgroundColor: '#fff',
               },

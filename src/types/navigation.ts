@@ -27,6 +27,7 @@ export type RootStackParamList = {
   ManageFamily: undefined;
   JoinFamily: undefined;
   CreateParentAccount: undefined;
+  Settings: undefined;
 };
 
 export type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;

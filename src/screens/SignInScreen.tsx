@@ -14,12 +14,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   
   const { signIn } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -58,6 +61,26 @@ export default function SignInScreen() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setResetMessage('Please enter your email address above.');
+      return;
+    }
+    setResetMessage('');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage('Password reset email sent! Please check your inbox.');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setResetMessage('No account found with this email.');
+      } else if (err.code === 'auth/invalid-email') {
+        setResetMessage('Invalid email address.');
+      } else {
+        setResetMessage('Failed to send reset email. Please try again.');
+      }
+    }
+  };
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -88,6 +111,11 @@ export default function SignInScreen() {
           autoCapitalize="none"
           editable={!isLoading}
         />
+
+        <Text style={styles.forgotPasswordLink} onPress={handleForgotPassword}>
+          Forgot my password?
+        </Text>
+        {resetMessage ? <Text style={styles.resetMessage}>{resetMessage}</Text> : null}
 
         <TouchableOpacity
           style={styles.signInButton}
@@ -186,5 +214,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginVertical: 16,
     fontWeight: '500',
+  },
+  forgotPasswordLink: {
+    color: '#007AFF',
+    textAlign: 'right',
+    marginBottom: 10,
+    textDecorationLine: 'underline',
+    fontSize: 15,
+  },
+  resetMessage: {
+    color: '#007AFF',
+    textAlign: 'center',
+    marginBottom: 10,
+    fontSize: 15,
   },
 }); 
