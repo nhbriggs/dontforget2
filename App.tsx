@@ -17,7 +17,7 @@ import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity, Alert, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import NotificationService from './src/services/NotificationService';
 import * as Notifications from 'expo-notifications';
@@ -343,6 +343,12 @@ function Navigation() {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerLeft: () => (
+                <Image
+                  source={require('./assets/images/logo_transparent.png')}
+                  style={{ width: 32, height: 32, marginRight: 8, resizeMode: 'contain' }}
+                />
+              ),
               headerRight: () => (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity 
@@ -375,6 +381,14 @@ function Navigation() {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight: () => (
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <Image
+                    source={require('./assets/images/LogoName.png')}
+                    style={{ width: 140, height: 140, marginRight: 8, marginTop: -50, marginBottom: -50, resizeMode: 'contain', alignSelf: 'center' }}
+                  />
+                </View>
+              ),
             }}
           />
           <Stack.Screen 
@@ -388,6 +402,14 @@ function Navigation() {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight: () => (
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <Image
+                    source={require('./assets/images/LogoName.png')}
+                    style={{ width: 140, height: 140, marginRight: 8, marginTop: -50, marginBottom: -50, resizeMode: 'contain', alignSelf: 'center' }}
+                  />
+                </View>
+              ),
             }}
           />
           <Stack.Screen 
@@ -403,7 +425,17 @@ function Navigation() {
               },
             }}
           />
-          <Stack.Screen name="AllCompletedReminders" component={AllCompletedRemindersScreen} options={{ title: 'Completed Reminders' }} />
+          <Stack.Screen name="AllCompletedReminders" component={AllCompletedRemindersScreen} options={{ 
+            title: 'Completed Reminders',
+            headerRight: () => (
+              <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                <Image
+                  source={require('./assets/images/LogoName.png')}
+                  style={{ width: 140, height: 140, marginRight: 8, marginTop: -50, marginBottom: -50, resizeMode: 'contain', alignSelf: 'center' }}
+                />
+              </View>
+            )
+          }} />
           <Stack.Screen 
             name="ManageFamily" 
             component={ManageFamilyScreen}
@@ -415,6 +447,14 @@ function Navigation() {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight: () => (
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <Image
+                    source={require('./assets/images/LogoName.png')}
+                    style={{ width: 140, height: 140, marginRight: 8, marginTop: -50, marginBottom: -50, resizeMode: 'contain', alignSelf: 'center' }}
+                  />
+                </View>
+              ),
             }}
           />
           <Stack.Screen 
@@ -428,6 +468,14 @@ function Navigation() {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight: () => (
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <Image
+                    source={require('./assets/images/LogoName.png')}
+                    style={{ width: 140, height: 140, marginRight: 8, marginTop: -50, marginBottom: -50, resizeMode: 'contain', alignSelf: 'center' }}
+                  />
+                </View>
+              ),
             }}
           />
         </>

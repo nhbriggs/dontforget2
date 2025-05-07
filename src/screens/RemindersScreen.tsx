@@ -74,6 +74,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [sortAsc, setSortAsc] = useState(false);
 
   // Define filter type and state
   type FilterType = null | 'assigned-by-parent' | 'assigned-by-me' | string;
@@ -340,15 +341,17 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
         result = reminders.filter(reminder => reminder.assignedTo === selectedFilter);
       }
     }
-    // Sort so unblocked reminders are at the top
+    // Sort so unblocked reminders are at the top, then by dueDate
     return result.slice().sort((a, b) => {
       if (!!a.blocked === !!b.blocked) {
-        // If both are blocked or both are unblocked, sort by createdAt descending
-        return b.createdAt.getTime() - a.createdAt.getTime();
+        // If both are blocked or both are unblocked, sort by dueDate
+        return sortAsc
+          ? a.dueDate.getTime() - b.dueDate.getTime()
+          : b.dueDate.getTime() - a.dueDate.getTime();
       }
       return a.blocked ? 1 : -1;
     });
-  }, [selectedFilter, reminders, user]);
+  }, [selectedFilter, reminders, user, sortAsc]);
 
   const testCompletionNotification = async () => {
     if (!user || !familyMembers.length) return;
@@ -394,13 +397,27 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       <View style={styles.topSection}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reminders</Text>
-          <TouchableOpacity
-            style={styles.completedButton}
-            onPress={() => navigation.navigate('AllCompletedReminders')}
-          >
-            <MaterialCommunityIcons name="check-all" size={22} color="#34c759" />
-            <Text style={styles.completedButtonText}>Completed</Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={styles.completedButton}
+              onPress={() => navigation.navigate('AllCompletedReminders')}
+            >
+              <MaterialCommunityIcons name="check-all" size={22} color="#34c759" />
+              <Text style={styles.completedButtonText}>Completed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sortButton}
+              onPress={() => setSortAsc((prev) => !prev)}
+              accessibilityLabel="Toggle sort order"
+            >
+              <MaterialCommunityIcons
+                name={sortAsc ? 'sort-calendar-ascending' : 'sort-calendar-descending'}
+                size={22}
+                color="#007AFF"
+              />
+              <Text style={styles.sortButtonText}>{sortAsc ? 'Asc' : 'Desc'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {familyMembers.length > 0 && (
@@ -879,5 +896,19 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e6f0fa',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  sortButtonText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 }); 

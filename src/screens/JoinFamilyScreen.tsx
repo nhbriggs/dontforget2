@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image } from 'react-native';
 import { FamilyService } from '../services/FamilyService';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { db } from '../config/firebase';
@@ -100,10 +100,11 @@ export default function JoinFamilyScreen() {
 
   return (
     <View style={styles.container}>
+      <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
       <Text style={styles.title}>Join a Family</Text>
       {step === 'validate' ? (
         <>
-          <Text style={styles.subtitle}>Enter your invite code and family name</Text>
+          <Text style={styles.subtitle}>Enter your invite code issued by a family parent and family name to create an account</Text>
           {joinError ? <Text style={styles.error}>{joinError}</Text> : null}
           <TextInput
             style={styles.input}
@@ -185,8 +186,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#fdf1e8',
     padding: 20,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   title: {
     fontSize: 24,

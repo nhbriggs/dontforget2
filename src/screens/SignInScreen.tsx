@@ -90,8 +90,9 @@ export default function SignInScreen() {
       style={styles.container}
     >
       <View style={styles.form}>
-        <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
         <Text style={styles.title}>Dont Forget 2</Text>
+        <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
+        <Text style={styles.quote}>An App to help our teenage kids not forget stuff</Text>
         
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -155,6 +156,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+  },
+  quote: {
+    fontSize: 18,
+    fontStyle: 'italic',
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Marker Felt' : 'sans-serif',
   },
   title: {
     fontSize: 24,

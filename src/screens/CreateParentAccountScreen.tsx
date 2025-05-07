@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
@@ -85,6 +85,7 @@ export default function CreateParentAccountScreen() {
 
   return (
     <View style={styles.container}>
+      <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
       <Text style={styles.title}>Create Family & Parent Account</Text>
       <Text style={styles.helpText}>
         Complete the form below to create your family and set up your own parent account.{"\n"}
@@ -150,8 +151,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#fdf1e8',
     padding: 20,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   title: {
     fontSize: 22,
@@ -162,7 +170,6 @@ const styles = StyleSheet.create({
   helpText: {
     fontSize: 15,
     color: '#666',
-    textAlign: 'center',
     marginBottom: 18,
     marginTop: -8,
     lineHeight: 22,
