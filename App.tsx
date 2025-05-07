@@ -336,7 +336,7 @@ function Navigation() {
             name="Reminders" 
             component={RemindersScreen}
             options={{
-              title: user?.displayName ? `${user.displayName} Don't Forget 2` : "Don't Forget 2",
+              title: user?.displayName ? `${user.displayName} don't forget 2` : "don't forget 2",
               headerStyle: {
                 backgroundColor: '#fff',
               },

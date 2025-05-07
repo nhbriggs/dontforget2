@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, getDocs, deleteDoc, doc, orderBy, DocumentData, getDoc } from 'firebase/firestore';
@@ -75,6 +76,9 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [sortAsc, setSortAsc] = useState(false);
+  const [parentOnlyFilter, setParentOnlyFilter] = useState(false);
+  const [parentIds, setParentIds] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Define filter type and state
   type FilterType = null | 'assigned-by-parent' | 'assigned-by-me' | string;
@@ -128,6 +132,20 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       }
 
       setFamilyMembers(members);
+
+      // Load parent IDs for Parent Only filter
+      if (user?.familyId) {
+        try {
+          const familyRef = doc(db, 'families', user.familyId);
+          const familySnapshot = await getDoc(familyRef);
+          if (familySnapshot.exists()) {
+            const familyData = familySnapshot.data();
+            setParentIds(familyData.parentIds || []);
+          }
+        } catch (error) {
+          console.error('Error loading parent IDs:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading family members:', error);
     }
@@ -311,17 +329,32 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     }
   };
 
+  // Helper to format date as dd-MMM-YYYY at HH:MM am/pm
+  const formatTime = (date: Date) => {
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const hourStr = hours.toString().padStart(2, '0');
+    return `${hourStr}:${minutes} ${ampm}`;
+  };
+
   const formatDueDate = (date: Date) => {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     if (date.toDateString() === today.toDateString()) {
-      return `Today at ${date.toLocaleTimeString()}`;
+      return `Today at ${formatTime(date)}`;
     } else if (date.toDateString() === tomorrow.toDateString()) {
-      return `Tomorrow at ${date.toLocaleTimeString()}`;
+      return `Tomorrow at ${formatTime(date)}`;
     } else {
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+      const weekday = date.toLocaleString('en-US', { weekday: 'short' });
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      const year = date.getFullYear();
+      return `${weekday} ${day} ${month} ${year} at ${formatTime(date)}`;
     }
   };
 
@@ -341,6 +374,9 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
         result = reminders.filter(reminder => reminder.assignedTo === selectedFilter);
       }
     }
+    if (parentOnlyFilter && parentIds.length > 0) {
+      result = result.filter(reminder => parentIds.includes(reminder.createdBy));
+    }
     // Sort so unblocked reminders are at the top, then by dueDate
     return result.slice().sort((a, b) => {
       if (!!a.blocked === !!b.blocked) {
@@ -351,7 +387,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       }
       return a.blocked ? 1 : -1;
     });
-  }, [selectedFilter, reminders, user, sortAsc]);
+  }, [selectedFilter, reminders, user, sortAsc, parentOnlyFilter, parentIds]);
 
   const testCompletionNotification = async () => {
     if (!user || !familyMembers.length) return;
@@ -376,7 +412,13 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     await NotificationService.sendCompletionNotification(testReminder, familyMembers[0].id);
   };
 
-  if (loading) {
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await loadReminders();
+    setRefreshing(false);
+  }, []);
+
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#0000ff" />
@@ -397,27 +439,40 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       <View style={styles.topSection}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reminders</Text>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity
-              style={styles.completedButton}
-              onPress={() => navigation.navigate('AllCompletedReminders')}
-            >
-              <MaterialCommunityIcons name="check-all" size={22} color="#34c759" />
-              <Text style={styles.completedButtonText}>Completed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sortButton}
-              onPress={() => setSortAsc((prev) => !prev)}
-              accessibilityLabel="Toggle sort order"
-            >
-              <MaterialCommunityIcons
-                name={sortAsc ? 'sort-calendar-ascending' : 'sort-calendar-descending'}
-                size={22}
-                color="#007AFF"
-              />
-              <Text style={styles.sortButtonText}>{sortAsc ? 'Asc' : 'Desc'}</Text>
-            </TouchableOpacity>
-          </View>
+        </View>
+        <View style={[styles.headerButtons, { marginTop: 0, marginBottom: 8 }]}> 
+          <TouchableOpacity
+            style={styles.completedButton}
+            onPress={() => navigation.navigate('AllCompletedReminders')}
+          >
+            <MaterialCommunityIcons name="check-all" size={22} color="#34c759" />
+            <Text style={styles.completedButtonText}>Completed</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sortButton}
+            onPress={() => setSortAsc((prev) => !prev)}
+            accessibilityLabel="Toggle sort order"
+          >
+            <MaterialCommunityIcons
+              name={sortAsc ? 'sort-calendar-ascending' : 'sort-calendar-descending'}
+              size={22}
+              color="#007AFF"
+            />
+            <Text style={styles.sortButtonText}>{sortAsc ? 'Asc' : 'Desc'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sortButton,
+              parentOnlyFilter
+                ? { backgroundColor: '#007AFF', borderColor: '#007AFF' }
+                : { backgroundColor: '#e6f0fa', borderColor: '#e6f0fa' }
+            ]}
+            onPress={() => setParentOnlyFilter((prev) => !prev)}
+            accessibilityLabel="Toggle parent only filter"
+          >
+            <MaterialCommunityIcons name="account-group" size={22} color={parentOnlyFilter ? '#fff' : '#007AFF'} />
+            <Text style={[styles.sortButtonText, parentOnlyFilter ? { color: '#fff' } : { color: '#007AFF' }]}>Parent Only</Text>
+          </TouchableOpacity>
         </View>
 
         {familyMembers.length > 0 && (
@@ -514,6 +569,14 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
           style={styles.reminderList}
           data={filteredReminders}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+            />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               onPress={() => {

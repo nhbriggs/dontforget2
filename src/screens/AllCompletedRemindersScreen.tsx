@@ -14,6 +14,22 @@ interface FamilyMember {
   displayName: string;
 }
 
+// Helper to format date as dd-MMM-YYYY HH:MM (24-hour)
+function formatDate(date: Date) {
+  if (!date) return 'Unknown';
+  const weekday = date.toLocaleString('en-US', { weekday: 'short' });
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = date.toLocaleString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  const hourStr = hours.toString().padStart(2, '0');
+  return `${weekday} ${day} ${month} ${year} at ${hourStr}:${minutes} ${ampm}`;
+}
+
 export default function AllCompletedRemindersScreen() {
   const { user } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -246,26 +262,23 @@ export default function AllCompletedRemindersScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.reminderCard}>
-            <View style={styles.row}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="check-circle" size={20} color="#34c759" />
               <Text style={styles.title}>{item.title}</Text>
+              <Text style={styles.childName}>{assigneeNames[item.assignedTo] || item.assignedTo || 'Unknown'}</Text>
             </View>
-            {/* Clone button */}
-            <TouchableOpacity
-              style={styles.cloneButton}
-              onPress={() => handleCloneReminder(item)}
-            >
-              <MaterialCommunityIcons name="content-copy" size={20} color="#888" />
-            </TouchableOpacity>
             <View style={styles.infoRow}>
-              <Text style={styles.date}>Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : 'Unknown'}</Text>
+              <Text style={styles.date}>Completed: {item.completedAt ? formatDate(new Date(item.completedAt)) : 'Unknown'}</Text>
               <View style={styles.rightInfo}>
-                <Text style={styles.childName}>
-                  {assigneeNames[item.assignedTo] || item.assignedTo || 'Unknown'}
-                </Text>
                 <View style={styles.snoozeContainer}>
                   <MaterialCommunityIcons name="sleep" size={14} color="#b8860b" />
                   <Text style={styles.snoozeCount}>{item.snoozeCount ?? 0}</Text>
+                  <TouchableOpacity
+                    style={styles.cloneButton}
+                    onPress={() => handleCloneReminder(item)}
+                  >
+                    <MaterialCommunityIcons name="content-copy" size={20} color="#888" />
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>

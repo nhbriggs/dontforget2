@@ -78,6 +78,22 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
   return nextDate; // Fallback, should rarely happen
 };
 
+// Helper to format date as Ddd DD Mmm YYYY at HH:MM am/pm
+function formatFullDate(date: Date) {
+  if (!date) return 'Date not available';
+  const weekday = date.toLocaleString('en-US', { weekday: 'short' });
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = date.toLocaleString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hourStr = hours.toString().padStart(2, '0');
+  return `${weekday} ${day} ${month} ${year} at ${hourStr}:${minutes} ${ampm}`;
+}
+
 export default function AddReminderScreen({ navigation, route }: AddReminderScreenProps) {
   const { user, updateUser } = useAuth();
   const cloneData = route.params?.cloneData;
@@ -455,7 +471,7 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           style={styles.dateButton}
         >
           <Text style={styles.dateButtonText}>
-            {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString()}
+            {formatFullDate(dueDate)}
           </Text>
         </TouchableOpacity>
         {showDatePicker && (
@@ -552,7 +568,7 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
 
               <View style={styles.recurrenceInfo}>
                 <Text style={styles.recurrenceInfoText}>
-                  First occurrence: {dueDate.toLocaleDateString()}
+                  First occurrence: {formatFullDate(dueDate)}
                 </Text>
                 <Text style={styles.recurrenceInfoText}>
                   Repeats: Every {weekFrequency} {weekFrequency === '1' ? 'week' : 'weeks'} on{' '}
@@ -562,11 +578,11 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
                 </Text>
                 {selectedDays.length > 0 && (
                   <Text style={styles.recurrenceInfoText}>
-                    Next occurrence: {getNextOccurrence(
+                    Next occurrence: {formatFullDate(getNextOccurrence(
                       dueDate,
                       selectedDays,
                       parseInt(weekFrequency || '1')
-                    ).toLocaleDateString()}
+                    ))}
                   </Text>
                 )}
               </View>

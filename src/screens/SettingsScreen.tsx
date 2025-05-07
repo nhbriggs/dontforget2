@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Switch, ActivityIndicator, Appearance, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Switch, ActivityIndicator, Appearance, Modal, Platform, ScrollView } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
@@ -205,9 +205,17 @@ export default function SettingsScreen() {
       // Refetch family
       const familyDoc = await getDoc(doc(db, 'families', family.id));
       if (familyDoc.exists()) setFamily(familyDoc.data() as Family);
-      window.alert('Your family has been upgraded to the paid plan!');
+      if (Platform.OS === 'web') {
+        window.alert('Your family has been upgraded to the paid plan!');
+      } else {
+        Alert.alert('Success', 'Your family has been upgraded to the paid plan!');
+      }
     } catch (error) {
-      window.alert('Failed to upgrade subscription. Please try again.');
+      if (Platform.OS === 'web') {
+        window.alert('Failed to upgrade subscription. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to upgrade subscription. Please try again.');
+      }
     }
   };
 
@@ -234,14 +242,22 @@ export default function SettingsScreen() {
       // Refetch family
       const familyDoc = await getDoc(doc(db, 'families', family.id));
       if (familyDoc.exists()) setFamily(familyDoc.data() as Family);
-      window.alert('Your family has been downgraded to the free plan. Only your most recent reminder is active.');
+      if (Platform.OS === 'web') {
+        window.alert('Your family has been downgraded to the free plan. Only your most recent reminder is active.');
+      } else {
+        Alert.alert('Success', 'Your family has been downgraded to the free plan. Only your most recent reminder is active.');
+      }
     } catch (error) {
-      window.alert('Failed to downgrade subscription. Please try again.');
+      if (Platform.OS === 'web') {
+        window.alert('Failed to downgrade subscription. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to downgrade subscription. Please try again.');
+      }
     }
   };
 
   return (
-    <View style={[styles.container, darkMode && styles.containerDark]}>
+    <ScrollView style={[styles.container, darkMode && styles.containerDark]} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.sectionTitle}>Account Settings</Text>
       <View style={styles.section}>
         <Text style={styles.label}>Display Name</Text>
@@ -362,12 +378,12 @@ export default function SettingsScreen() {
             ) : family ? (
               <>
                 <Text style={styles.label}>
-                  Subscription: {family.subscription?.type === 'paid' ? 'Paid' : 'Free'}
+                  Subscription: <Text style={{fontWeight: 'bold'}}>{family.subscription?.type === 'paid' ? 'Paid' : 'Free'}</Text>
                 </Text>
                 <Text style={styles.label}>
                   {family.subscription?.type === 'free'
-                    ? 'Free plan: 1 reminder limit'
-                    : 'Paid plan: Unlimited reminders'}
+                    ? <><Text>Free plan: </Text><Text style={{fontWeight: 'bold'}}>1 reminder limit</Text></>
+                    : <><Text>Paid plan: </Text><Text style={{fontWeight: 'bold'}}>Unlimited reminders</Text></>}
                 </Text>
                 {family.subscription?.type === 'free' ? (
                   <TouchableOpacity style={styles.button} onPress={handleUpgradeSubscription}>
@@ -505,7 +521,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 

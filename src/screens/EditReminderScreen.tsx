@@ -82,6 +82,22 @@ const getNextOccurrence = (startDate: Date, selectedDays: string[], weekFrequenc
   return nextDate; // Fallback, should rarely happen
 };
 
+// Helper to format date as Ddd DD Mmm YYYY at HH:MM am/pm
+function formatFullDate(date: Date) {
+  if (!date) return 'Date not available';
+  const weekday = date.toLocaleString('en-US', { weekday: 'short' });
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = date.toLocaleString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hourStr = hours.toString().padStart(2, '0');
+  return `${weekday} ${day} ${month} ${year} at ${hourStr}:${minutes} ${ampm}`;
+}
+
 const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigation }) => {
   const { reminderId, canEdit } = route.params;
   const { user } = useAuth();
@@ -305,7 +321,7 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
             <MaterialCommunityIcons name="calendar" size={24} color="#666" style={styles.readOnlyIcon} />
             <View>
               <Text style={styles.readOnlyLabel}>Due Date</Text>
-              <Text style={styles.readOnlyText}>{dueDate.toLocaleDateString()}</Text>
+              <Text style={styles.readOnlyText}>{formatFullDate(dueDate)}</Text>
             </View>
           </View>
 
@@ -398,7 +414,7 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
             <View>
               <Text style={styles.readOnlyLabel}>Original Due Date</Text>
               <Text style={styles.readOnlyText}>
-                {reminder.dueDate instanceof Timestamp ? reminder.dueDate.toDate().toLocaleString() : 'Date not available'}
+                {reminder.dueDate instanceof Timestamp ? formatFullDate(reminder.dueDate.toDate()) : 'Date not available'}
               </Text>
             </View>
           </View>
@@ -565,7 +581,7 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
           style={styles.dateButton}
         >
           <Text style={styles.dateButtonText}>
-            {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString()}
+            {formatFullDate(dueDate)}
           </Text>
         </TouchableOpacity>
         {showDatePicker && (
