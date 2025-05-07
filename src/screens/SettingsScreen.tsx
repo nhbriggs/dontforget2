@@ -5,6 +5,7 @@ import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCre
 import { auth, db } from '../config/firebase';
 import { doc, updateDoc, collection, query, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { Family } from '../types/Family';
+import { Reminder } from '../types/Reminder';
 
 export default function SettingsScreen() {
   const { user } = useAuth();
@@ -193,12 +194,49 @@ export default function SettingsScreen() {
         'subscription.type': 'paid',
         'subscription.startDate': new Date()
       });
+      // Unblock all reminders for this family
+      const remindersQuery = query(collection(db, 'reminders'), where('familyId', '==', family.id));
+      const remindersSnap = await getDocs(remindersQuery);
+      const batch = writeBatch(db);
+      remindersSnap.forEach(docSnap => {
+        batch.update(docSnap.ref, { blocked: false });
+      });
+      await batch.commit();
       // Refetch family
       const familyDoc = await getDoc(doc(db, 'families', family.id));
       if (familyDoc.exists()) setFamily(familyDoc.data() as Family);
       window.alert('Your family has been upgraded to the paid plan!');
     } catch (error) {
       window.alert('Failed to upgrade subscription. Please try again.');
+    }
+  };
+
+  const handleDowngradeSubscription = async () => {
+    if (!family) return;
+    try {
+      await updateDoc(doc(db, 'families', family.id), {
+        'subscription.type': 'free',
+        'subscription.startDate': new Date()
+      });
+      // Block all but the most recent reminder
+      const remindersQuery = query(collection(db, 'reminders'), where('familyId', '==', family.id));
+      const remindersSnap = await getDocs(remindersQuery);
+      const reminders = remindersSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Reminder));
+      reminders.sort((a, b) => {
+        const getTime = (val: any) => (val && typeof val.toMillis === 'function') ? val.toMillis() : (val instanceof Date ? val.getTime() : 0);
+        return getTime(a.createdAt) - getTime(b.createdAt);
+      });
+      const batch = writeBatch(db);
+      reminders.forEach((reminder, idx) => {
+        batch.update(doc(db, 'reminders', reminder.id), { blocked: idx > 0 });
+      });
+      await batch.commit();
+      // Refetch family
+      const familyDoc = await getDoc(doc(db, 'families', family.id));
+      if (familyDoc.exists()) setFamily(familyDoc.data() as Family);
+      window.alert('Your family has been downgraded to the free plan. Only your most recent reminder is active.');
+    } catch (error) {
+      window.alert('Failed to downgrade subscription. Please try again.');
     }
   };
 
@@ -331,9 +369,13 @@ export default function SettingsScreen() {
                     ? 'Free plan: 1 reminder limit'
                     : 'Paid plan: Unlimited reminders'}
                 </Text>
-                {family.subscription?.type === 'free' && (
+                {family.subscription?.type === 'free' ? (
                   <TouchableOpacity style={styles.button} onPress={handleUpgradeSubscription}>
                     <Text style={styles.buttonText}>Upgrade to Paid Plan</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={[styles.button, { backgroundColor: '#888' }]} onPress={handleDowngradeSubscription}>
+                    <Text style={styles.buttonText}>Downgrade to Free Plan</Text>
                   </TouchableOpacity>
                 )}
               </>

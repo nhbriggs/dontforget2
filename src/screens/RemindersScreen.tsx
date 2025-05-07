@@ -211,6 +211,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                 } : null,
                 checklist: data.checklist || [],
                 createdBy: data.createdBy,
+                blocked: data.blocked || false,
               });
             }
           });
@@ -270,6 +271,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
             } : null,
             checklist: data.checklist || [],
             createdBy: data.createdBy,
+            blocked: data.blocked || false,
           });
         });
 
@@ -323,24 +325,29 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
   };
 
   const filteredReminders = React.useMemo(() => {
-    if (!selectedFilter) {
-      return reminders;
+    let result = reminders;
+    if (selectedFilter) {
+      if (selectedFilter === 'assigned-by-parent') {
+        result = reminders.filter(reminder => 
+          reminder.assignedTo === user?.id && reminder.createdBy !== user?.id
+        );
+      } else if (selectedFilter === 'assigned-by-me') {
+        result = reminders.filter(reminder => 
+          reminder.createdBy === user?.id
+        );
+      } else {
+        // For parent users, filter by assignedTo
+        result = reminders.filter(reminder => reminder.assignedTo === selectedFilter);
+      }
     }
-
-    if (selectedFilter === 'assigned-by-parent') {
-      return reminders.filter(reminder => 
-        reminder.assignedTo === user?.id && reminder.createdBy !== user?.id
-      );
-    }
-
-    if (selectedFilter === 'assigned-by-me') {
-      return reminders.filter(reminder => 
-        reminder.createdBy === user?.id
-      );
-    }
-
-    // For parent users, filter by assignedTo
-    return reminders.filter(reminder => reminder.assignedTo === selectedFilter);
+    // Sort so unblocked reminders are at the top
+    return result.slice().sort((a, b) => {
+      if (!!a.blocked === !!b.blocked) {
+        // If both are blocked or both are unblocked, sort by createdAt descending
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      }
+      return a.blocked ? 1 : -1;
+    });
   }, [selectedFilter, reminders, user]);
 
   const testCompletionNotification = async () => {
@@ -359,6 +366,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
       recurrenceConfig: null,
       checklist: [],
       createdBy: user.id,
+      blocked: false,
     };
 
     // Send the completion notification
@@ -491,14 +499,30 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() => navigation.navigate('EditReminder', { 
-                reminderId: item.id,
-                canEdit: user?.id === item.createdBy
-              })}
-              style={styles.reminderItem}
+              onPress={() => {
+                if (!item.blocked) {
+                  navigation.navigate('EditReminder', {
+                    reminderId: item.id,
+                    canEdit: user?.id === item.createdBy
+                  });
+                }
+              }}
+              style={[styles.reminderItem, item.blocked && styles.reminderBlocked]}
+              disabled={!!item.blocked}
             >
               <View style={styles.reminderContent}>
-                <Text style={styles.reminderTitle}>{item.title}</Text>
+                <Text style={[styles.reminderTitle, item.blocked && styles.reminderBlockedText]}>{item.title}</Text>
+                {item.blocked && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={styles.blockedLabel}>Locked – upgrade subscription to access this reminder</Text>
+                    <TouchableOpacity
+                      style={styles.upgradeButton}
+                      onPress={() => navigation.navigate('Settings')}
+                    >
+                      <Text style={styles.upgradeButtonText}>Upgrade</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 <View style={styles.reminderField}>
                   <MaterialCommunityIcons name="account-circle" size={16} color="#666" />
                   <Text style={styles.reminderAssignee}>
@@ -573,7 +597,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
                   </View>
                 )}
               </View>
-              {/* Only show delete button if user created the reminder */}
+              {/* Only show delete button if user created the reminder and it's not blocked */}
               {user?.id === item.createdBy && (
                 <TouchableOpacity
                   onPress={() => handleDeleteReminder(item.id)}
@@ -830,5 +854,30 @@ const styles = StyleSheet.create({
     color: '#34c759',
     fontWeight: 'bold',
     marginLeft: 4,
+  },
+  reminderBlocked: {
+    backgroundColor: '#f0f0f0',
+    opacity: 0.6,
+  },
+  reminderBlockedText: {
+    color: '#aaa',
+  },
+  blockedLabel: {
+    color: '#ff3b30',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  upgradeButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  upgradeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
 }); 
