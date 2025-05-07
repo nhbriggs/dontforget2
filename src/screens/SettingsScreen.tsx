@@ -170,7 +170,7 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.label}>Display Name</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, (!isEditingName || isSavingName) && styles.inputReadonly]}
           value={displayName}
           onChangeText={setDisplayName}
           editable={isEditingName && !isSavingName}
@@ -444,6 +444,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 10,
     backgroundColor: '#fff',
+  },
+  inputReadonly: {
+    backgroundColor: '#f0f0f0',
+    color: '#888',
   },
   inputError: {
     borderColor: '#ff3b30',
