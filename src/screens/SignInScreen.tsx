@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -89,7 +90,8 @@ export default function SignInScreen() {
       style={styles.container}
     >
       <View style={styles.form}>
-        <Text style={styles.title}>Welcome Back</Text>
+        <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
+        <Text style={styles.title}>Dont Forget 2</Text>
         
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -147,7 +149,7 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#fdf1e8',
   },
   form: {
     flex: 1,
@@ -229,5 +231,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
     fontSize: 15,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
 }); 
