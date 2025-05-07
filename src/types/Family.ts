@@ -5,6 +5,11 @@ export interface Family {
   createdBy: string; // User ID of the admin parent
   parentIds: string[]; // Array of parent user IDs
   childrenIds: string[]; // Array of child user IDs
+  subscription: {
+    type: 'free' | 'paid';
+    startDate: Date;
+    endDate?: Date;
+  };
   joinCodes?: {
     code: string;
     type: 'parent' | 'child';

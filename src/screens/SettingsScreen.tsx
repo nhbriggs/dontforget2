@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Switch, ActivityIndicator, Appearance, Modal } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
-import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
+import { Family } from '../types/Family';
 
 export default function SettingsScreen() {
   const { user } = useAuth();
@@ -32,6 +33,27 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [family, setFamily] = useState<Family | null>(null);
+  const [isLoadingFamily, setIsLoadingFamily] = useState(false);
+
+  useEffect(() => {
+    const fetchFamily = async () => {
+      if (!user?.familyId) return;
+      setIsLoadingFamily(true);
+      try {
+        const familyDoc = await getDoc(doc(db, 'families', user.familyId));
+        if (familyDoc.exists()) {
+          setFamily(familyDoc.data() as Family);
+        }
+      } catch (e) {
+        setFamily(null);
+      } finally {
+        setIsLoadingFamily(false);
+      }
+    };
+    fetchFamily();
+  }, [user?.familyId]);
 
   // Save display name
   const handleToggleNameEdit = () => {
@@ -164,6 +186,22 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleUpgradeSubscription = async () => {
+    if (!family) return;
+    try {
+      await updateDoc(doc(db, 'families', family.id), {
+        'subscription.type': 'paid',
+        'subscription.startDate': new Date()
+      });
+      // Refetch family
+      const familyDoc = await getDoc(doc(db, 'families', family.id));
+      if (familyDoc.exists()) setFamily(familyDoc.data() as Family);
+      window.alert('Your family has been upgraded to the paid plan!');
+    } catch (error) {
+      window.alert('Failed to upgrade subscription. Please try again.');
+    }
+  };
+
   return (
     <View style={[styles.container, darkMode && styles.containerDark]}>
       <Text style={styles.sectionTitle}>Account Settings</Text>
@@ -276,6 +314,35 @@ export default function SettingsScreen() {
         <Text style={styles.label}>Dark Mode</Text>
         <Switch value={darkMode} onValueChange={handleToggleDarkMode} />
       </View>
+
+      {user?.role === 'parent' && (
+        <>
+          <Text style={styles.sectionTitle}>Subscription Plan</Text>
+          <View style={styles.section}>
+            {isLoadingFamily ? (
+              <Text>Loading subscription info...</Text>
+            ) : family ? (
+              <>
+                <Text style={styles.label}>
+                  Subscription: {family.subscription?.type === 'paid' ? 'Paid' : 'Free'}
+                </Text>
+                <Text style={styles.label}>
+                  {family.subscription?.type === 'free'
+                    ? 'Free plan: 1 reminder limit'
+                    : 'Paid plan: Unlimited reminders'}
+                </Text>
+                {family.subscription?.type === 'free' && (
+                  <TouchableOpacity style={styles.button} onPress={handleUpgradeSubscription}>
+                    <Text style={styles.buttonText}>Upgrade to Paid Plan</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <Text>No family subscription info found.</Text>
+            )}
+          </View>
+        </>
+      )}
 
       {user?.role === 'parent' && (
         <>

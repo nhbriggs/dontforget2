@@ -126,6 +126,41 @@ export default function ManageFamilyScreen() {
     }
   };
 
+  const handleUpgradeSubscription = () => {
+    Alert.alert(
+      'Upgrade Subscription',
+      'Would you like to upgrade to the paid plan? This will allow unlimited reminders for your family.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Upgrade',
+          onPress: async () => {
+            try {
+              if (!family) return;
+              
+              const familyRef = doc(db, 'families', family.id);
+              await updateDoc(familyRef, {
+                'subscription.type': 'paid',
+                'subscription.startDate': new Date()
+              });
+              
+              // Reload family data
+              await loadFamily();
+              
+              Alert.alert('Success', 'Your family has been upgraded to the paid plan!');
+            } catch (error) {
+              console.error('Error upgrading subscription:', error);
+              Alert.alert('Error', 'Failed to upgrade subscription. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (!family) {
     return (
       <View style={styles.container}>
@@ -327,5 +362,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  familyName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
   },
 }); 

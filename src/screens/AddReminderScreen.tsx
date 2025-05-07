@@ -272,14 +272,46 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
       return;
     }
 
+    if (!user?.familyId) {
+      Alert.alert('Error', 'No family associated with this account');
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // Check family subscription status
+      const familyRef = doc(db, 'families', user.familyId);
+      const familyDoc = await getDoc(familyRef);
+      const familyData = familyDoc.data();
+
+      if (!familyData) {
+        Alert.alert('Error', 'Family not found');
+        return;
+      }
+
+      // Check if family is on free plan and already has a reminder
+      if (familyData.subscription?.type === 'free') {
+        const remindersQuery = query(
+          collection(db, 'reminders'),
+          where('familyId', '==', user.familyId)
+        );
+        const remindersSnapshot = await getDocs(remindersQuery);
+        
+        if (remindersSnapshot.size >= 1) {
+          console.log('DEBUG: Free plan limit hit, reminders count:', remindersSnapshot.size);
+          window.alert('You have reached the limit of 1 reminder on the free plan. To create more reminders, please upgrade your plan in the Settings screen.');
+          setLoading(false);
+          return;
+        }
+      }
+
       const reminderData = {
         title: title.trim(),
         checklist,
         assignedTo,
-        familyId: user?.familyId,
-        createdBy: user?.id,
+        familyId: user.familyId,
+        createdBy: user.id,
         createdAt: new Date(),
         dueDate,
         status: 'pending' as const,

@@ -18,7 +18,11 @@ export class FamilyService {
       createdBy: adminId,
       parentIds: [adminId],
       childrenIds: [],
-      joinCodes: []
+      joinCodes: [],
+      subscription: {
+        type: 'free',
+        startDate: new Date()
+      }
     };
 
     await setDoc(doc(db, 'families', familyId), family);
