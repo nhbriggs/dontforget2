@@ -258,11 +258,15 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={[styles.container, darkMode && styles.containerDark]} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.sectionTitle}>Account Settings</Text>
-      <View style={styles.section}>
-        <Text style={styles.label}>Display Name</Text>
+      <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>Account Settings</Text>
+      <View style={[styles.section, darkMode && styles.sectionDark]}>
+        <Text style={[styles.label, darkMode && styles.labelDark]}>Display Name</Text>
         <TextInput
-          style={[styles.input, (!isEditingName || isSavingName) && styles.inputReadonly]}
+          style={[
+            styles.input,
+            darkMode && styles.inputDark,
+            (!isEditingName || isSavingName) && (darkMode ? styles.inputReadonlyDark : styles.inputReadonly)
+          ]}
           value={displayName}
           onChangeText={setDisplayName}
           editable={isEditingName && !isSavingName}
@@ -270,7 +274,7 @@ export default function SettingsScreen() {
         {nameMessage ? <Text style={styles.message}>{nameMessage}</Text> : null}
         {!isEditingName ? (
           <TouchableOpacity
-            style={[styles.button, isSavingName && styles.buttonDisabled]}
+            style={[styles.button, darkMode && styles.buttonDark, isSavingName && (darkMode ? styles.buttonDisabledDark : styles.buttonDisabled)]}
             onPress={handleToggleNameEdit}
             disabled={isSavingName}
           >
@@ -279,14 +283,14 @@ export default function SettingsScreen() {
         ) : (
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity
-              style={[styles.button, isSavingName && styles.buttonDisabled]}
+              style={[styles.button, darkMode && styles.buttonDark, isSavingName && (darkMode ? styles.buttonDisabledDark : styles.buttonDisabled)]}
               onPress={handleSaveName}
               disabled={isSavingName}
             >
               {isSavingName ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save Name</Text>}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
+              style={[styles.button, darkMode ? styles.cancelButtonDark : styles.cancelButton]}
               onPress={handleToggleNameEdit}
               disabled={isSavingName}
             >
@@ -296,22 +300,23 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      <Text style={styles.sectionTitle}>Password</Text>
-      <View style={styles.section}>
+      <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>Password</Text>
+      <View style={[styles.section, darkMode && styles.sectionDark]}>
         {!showPasswordFields ? (
           <>
-            <TouchableOpacity style={styles.button} onPress={() => setShowPasswordFields(true)}>
+            <TouchableOpacity style={[styles.button, darkMode && styles.buttonDark]} onPress={() => setShowPasswordFields(true)}>
               <Text style={styles.buttonText}>Change Password</Text>
             </TouchableOpacity>
             {passwordMessage ? <Text style={styles.errorText}>{passwordMessage}</Text> : null}
           </>
         ) : (
           <>
-            <Text style={styles.label}>Current Password</Text>
+            <Text style={[styles.label, darkMode && styles.labelDark]}>Current Password</Text>
             <TextInput
               style={[
                 styles.input,
-                currentPasswordError && styles.inputError
+                darkMode && styles.inputDark,
+                currentPasswordError && (darkMode ? styles.inputErrorDark : styles.inputError)
               ]}
               value={currentPassword}
               onChangeText={text => {
@@ -321,17 +326,17 @@ export default function SettingsScreen() {
               secureTextEntry
               editable={!isSavingPassword}
             />
-            <Text style={styles.label}>New Password</Text>
+            <Text style={[styles.label, darkMode && styles.labelDark]}>New Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, darkMode && styles.inputDark]}
               value={newPassword}
               onChangeText={handleNewPasswordChange}
               secureTextEntry
               editable={!isSavingPassword}
             />
-            <Text style={styles.label}>Confirm New Password</Text>
+            <Text style={[styles.label, darkMode && styles.labelDark]}>Confirm New Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, darkMode && styles.inputDark]}
               value={confirmPassword}
               onChangeText={handleConfirmPasswordChange}
               secureTextEntry
@@ -345,14 +350,14 @@ export default function SettingsScreen() {
             {resetMessage ? <Text style={styles.resetMessage}>{resetMessage}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
-                style={[styles.button, isSavingPassword && styles.buttonDisabled]}
+                style={[styles.button, darkMode && styles.buttonDark, isSavingPassword && (darkMode ? styles.buttonDisabledDark : styles.buttonDisabled)]}
                 onPress={handleSavePassword}
                 disabled={isSavingPassword}
               >
                 {isSavingPassword ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save Password</Text>}
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[styles.button, darkMode ? styles.cancelButtonDark : styles.cancelButton]}
                 onPress={() => setShowPasswordFields(false)}
                 disabled={isSavingPassword}
               >
@@ -363,34 +368,34 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      <Text style={styles.sectionTitle}>Appearance</Text>
-      <View style={styles.sectionRow}>
-        <Text style={styles.label}>Dark Mode</Text>
+      <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>Appearance</Text>
+      <View style={[styles.sectionRow, darkMode && styles.sectionRowDark]}>
+        <Text style={[styles.label, darkMode && styles.labelDark]}>Dark Mode</Text>
         <Switch value={darkMode} onValueChange={handleToggleDarkMode} />
       </View>
 
       {user?.role === 'parent' && (
         <>
-          <Text style={styles.sectionTitle}>Subscription Plan</Text>
-          <View style={styles.section}>
+          <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>Subscription Plan</Text>
+          <View style={[styles.section, darkMode && styles.sectionDark]}>
             {isLoadingFamily ? (
               <Text>Loading subscription info...</Text>
             ) : family ? (
               <>
-                <Text style={styles.label}>
+                <Text style={[styles.label, darkMode && styles.labelDark]}>
                   Subscription: <Text style={{fontWeight: 'bold'}}>{family.subscription?.type === 'paid' ? 'Paid' : 'Free'}</Text>
                 </Text>
-                <Text style={styles.label}>
+                <Text style={[styles.label, darkMode && styles.labelDark]}>
                   {family.subscription?.type === 'free'
                     ? <><Text>Free plan: </Text><Text style={{fontWeight: 'bold'}}>1 reminder limit</Text></>
                     : <><Text>Paid plan: </Text><Text style={{fontWeight: 'bold'}}>Unlimited reminders</Text></>}
                 </Text>
                 {family.subscription?.type === 'free' ? (
-                  <TouchableOpacity style={styles.button} onPress={handleUpgradeSubscription}>
+                  <TouchableOpacity style={[styles.button, darkMode && styles.buttonDark]} onPress={handleUpgradeSubscription}>
                     <Text style={styles.buttonText}>Upgrade to Paid Plan</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={[styles.button, { backgroundColor: '#888' }]} onPress={handleDowngradeSubscription}>
+                  <TouchableOpacity style={[styles.button, { backgroundColor: '#888' }, darkMode && styles.buttonDark]} onPress={handleDowngradeSubscription}>
                     <Text style={styles.buttonText}>Downgrade to Free Plan</Text>
                   </TouchableOpacity>
                 )}
@@ -404,13 +409,13 @@ export default function SettingsScreen() {
 
       {user?.role === 'parent' && (
         <>
-          <Text style={styles.sectionTitle}>Leave Dont Forget 2</Text>
-          <View style={styles.section}>
-            <Text style={styles.leaveDescription}>
+          <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>Leave Dont Forget 2</Text>
+          <View style={[styles.section, darkMode && styles.sectionDark]}>
+            <Text style={[styles.leaveDescription, darkMode && styles.leaveDescriptionDark]}>
               If you would like to leave the app, you can delete your entire family, all accounts, reminders, and all data associated with your family. This action is permanent and cannot be undone.
             </Text>
             <TouchableOpacity
-              style={[styles.button, { backgroundColor: '#ff3b30', marginTop: 12 }]}
+              style={[styles.button, { backgroundColor: '#ff3b30', marginTop: 12 }, darkMode && styles.buttonDark]}
               onPress={() => setShowDeleteModal(true)}
             >
               <Text style={[styles.buttonText, { color: '#fff' }]}>Delete Family & All Data</Text>
@@ -426,13 +431,13 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowDeleteModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, darkMode && styles.modalContentDark]}>
             <Text style={styles.deleteTitle}>Delete Family & All Data</Text>
             <Text style={styles.deleteWarning}>
               WARNING: This will permanently delete your entire family, all members, and all reminders from Dont Forget 2. This action cannot be undone. All accounts in this family will be deleted from the app and from Firebase. To confirm, please enter your credentials below.
             </Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, darkMode && styles.inputDark]}
               placeholder="Email"
               value={deleteEmail}
               onChangeText={setDeleteEmail}
@@ -441,7 +446,7 @@ export default function SettingsScreen() {
               keyboardType="email-address"
             />
             <TextInput
-              style={styles.input}
+              style={[styles.input, darkMode && styles.inputDark]}
               placeholder="Password"
               value={deletePassword}
               onChangeText={setDeletePassword}
@@ -450,14 +455,14 @@ export default function SettingsScreen() {
             {deleteError ? <Text style={styles.errorText}>{deleteError}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[styles.button, darkMode ? styles.cancelButtonDark : styles.cancelButton]}
                 onPress={() => setShowDeleteModal(false)}
                 disabled={isDeleting}
               >
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#ff3b30' }, isDeleting && styles.buttonDisabled]}
+                style={[styles.button, { backgroundColor: '#ff3b30' }, darkMode && styles.buttonDark, isDeleting && (darkMode ? styles.buttonDisabledDark : styles.buttonDisabled)]}
                 onPress={async () => {
                   setDeleteError('');
                   setIsDeleting(true);
@@ -532,13 +537,16 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   containerDark: {
-    backgroundColor: '#222',
+    backgroundColor: '#181a1b',
   },
   section: {
     marginBottom: 28,
     backgroundColor: '#f8f8f8',
     borderRadius: 10,
     padding: 16,
+  },
+  sectionDark: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   sectionRow: {
     flexDirection: 'row',
@@ -549,17 +557,26 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 28,
   },
+  sectionRowDark: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
     color: '#333',
   },
+  sectionTitleDark: {
+    color: '#f5f6fa',
+  },
   label: {
     fontSize: 15,
     color: '#555',
     marginBottom: 6,
     marginTop: 8,
+  },
+  labelDark: {
+    color: '#d1d1d1',
   },
   input: {
     borderWidth: 1,
@@ -569,15 +586,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 10,
     backgroundColor: '#fff',
+    color: '#222',
+  },
+  inputDark: {
+    backgroundColor: '#232526',
+    borderColor: '#444',
+    color: '#f5f6fa',
   },
   inputReadonly: {
     backgroundColor: '#f0f0f0',
     color: '#888',
   },
+  inputReadonlyDark: {
+    backgroundColor: '#2c2c2e',
+    color: '#aaa',
+  },
   inputError: {
     borderColor: '#ff3b30',
     borderWidth: 2,
     backgroundColor: '#fff0f0',
+  },
+  inputErrorDark: {
+    borderColor: '#ff3b30',
+    backgroundColor: '#3a2323',
   },
   button: {
     backgroundColor: '#007AFF',
@@ -586,9 +617,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     minWidth: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  buttonDark: {
+    backgroundColor: '#007AFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
+  },
+  buttonDisabledDark: {
+    backgroundColor: '#444',
   },
   buttonText: {
     color: '#fff',
@@ -598,6 +645,9 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: '#888',
     marginLeft: 10,
+  },
+  cancelButtonDark: {
+    backgroundColor: '#444',
   },
   message: {
     color: '#007AFF',
@@ -638,6 +688,9 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignItems: 'stretch',
   },
+  modalContentDark: {
+    backgroundColor: '#232526',
+  },
   deleteTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -656,5 +709,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 8,
     textAlign: 'center',
+  },
+  leaveDescriptionDark: {
+    color: '#d1d1d1',
   },
 }); 
