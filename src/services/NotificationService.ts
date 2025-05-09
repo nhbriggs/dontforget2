@@ -5,6 +5,7 @@ import { Reminder } from '../types/Reminder';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getAuth } from 'firebase/auth';
+import LocationService from './LocationService';
 
 // Queue for reminder due notifications
 let isNotificationHandlerSet = false;
@@ -23,7 +24,10 @@ const setupNotificationHandler = () => {
         shouldShowAlert: false,
         shouldPlaySound: false,
         shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
         priority: Notifications.AndroidNotificationPriority.MIN,
+        severity: Notifications.AndroidNotificationPriority.MIN,
         ios: {
           foregroundPresentationOptions: {
             alert: false,
@@ -40,22 +44,44 @@ const setupNotificationHandler = () => {
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
-        console.log('No current user, blocking notification');
+        console.log('❌ No current user, blocking notification');
         return blockNotification;
       }
 
       try {
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (!userDoc.exists()) {
-          console.log('User document not found, blocking notification');
+          console.log('❌ User document not found, blocking notification');
           return blockNotification;
         }
 
         const userRole = userDoc.data().role;
         const notificationType = notification.request.content.data?.type;
         
-        console.log('Current user role:', userRole);
-        console.log('Notification type:', notificationType);
+        console.log('👤 Current user role:', userRole);
+        console.log('🔔 Notification type:', notificationType);
+
+        // For test notifications, always show them
+        if (notification.request.content.data?.isTest) {
+          console.log('🧪 Test notification, showing it');
+          return {
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+            priority: Notifications.AndroidNotificationPriority.HIGH,
+            ios: {
+              foregroundPresentationOptions: {
+                alert: true,
+                badge: false,
+                sound: true,
+                banner: true,
+                list: true
+              }
+            }
+          };
+        }
 
         // Strict role-based blocking
         if (userRole === 'child' && notificationType === 'completion') {
@@ -81,7 +107,9 @@ const setupNotificationHandler = () => {
           shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: false,
-          priority: Notifications.AndroidNotificationPriority.DEFAULT,
+          shouldShowBanner: true,
+          shouldShowList: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
           ios: {
             foregroundPresentationOptions: {
               alert: true,
@@ -93,10 +121,10 @@ const setupNotificationHandler = () => {
           }
         };
       } catch (error) {
-        console.error('Error in notification handler:', error);
+        console.error('❌ Error handling notification:', error);
         return blockNotification;
       }
-    },
+    }
   });
   
   isNotificationHandlerSet = true;
@@ -138,19 +166,19 @@ class NotificationService {
   private static completionQueue: Map<string, Notifications.NotificationRequestInput> = new Map();
 
   static async requestPermissions() {
-    console.log('Requesting notification permissions...');
+    console.log('📱 Requesting notification permissions...');
     if (!Device.isDevice) {
-      console.log('Not a physical device, skipping notifications');
+      console.log('❌ Not a physical device, skipping notifications');
       return false;
     }
 
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      console.log('Existing permission status:', existingStatus);
+      console.log('📱 Existing permission status:', existingStatus);
       let finalStatus = existingStatus;
       
       if (existingStatus !== 'granted') {
-        console.log('Requesting permissions from user...');
+        console.log('📱 Requesting permissions from user...');
         const { status } = await Notifications.requestPermissionsAsync({
           ios: {
             allowAlert: true,
@@ -159,20 +187,30 @@ class NotificationService {
           },
         });
         finalStatus = status;
-        console.log('New permission status:', finalStatus);
+        console.log('📱 New permission status:', finalStatus);
       }
 
       if (finalStatus !== 'granted') {
-        console.log('Permission not granted');
+        console.log('❌ Permission not granted');
         return false;
       }
 
       // Set up the notification handler
       setupNotificationHandler();
 
+      // Log device info for debugging
+      console.log('📱 Device Info:', {
+        isDevice: Device.isDevice,
+        brand: Device.brand,
+        modelName: Device.modelName,
+        osName: Device.osName,
+        osVersion: Device.osVersion,
+        deviceType: Device.deviceType,
+      });
+
       return true;
     } catch (error) {
-      console.error('Error requesting notification permissions:', error);
+      console.error('❌ Error requesting notification permissions:', error);
       return false;
     }
   }
@@ -235,14 +273,14 @@ class NotificationService {
       // Create the notification request for due reminder
       const notificationContent = {
         title: `${recipientName} don't forget 2 ${reminder.title}`,
-        subtitle: null,
         body: `It's time to ${reminder.title.toLowerCase()}!`,
         data: { 
           reminderId: reminder.id,
           createdBy: reminder.createdBy,
           creatorRole: creatorRole,
           familyId: reminder.familyId,
-          type: 'due'
+          type: 'due',
+          isTest: reminder.title.toLowerCase().includes('test')
         },
         sound: 'default' as const,
       };
@@ -266,6 +304,15 @@ class NotificationService {
         },
       });
       console.log('🔔 Notification scheduled with ID:', notificationId);
+
+      // Start location tracking when the reminder is due
+      if (creatorRole === 'parent') {
+        // For parent-created reminders, start location tracking
+        setTimeout(() => {
+          LocationService.startLocationTracking(reminder.id);
+        }, dueDate.getTime() - now.getTime());
+      }
+
       return notificationId;
     } catch (error) {
       console.error('Error scheduling notification:', error);
@@ -338,16 +385,16 @@ class NotificationService {
       // Create completion notification content
       const notificationContent = {
         title: 'Reminder Completed! 🎉',
-        subtitle: null,
         body: `${completerName} has completed the reminder: ${reminder.title}`,
         data: { 
           reminderId: reminder.id,
           type: 'completion',
           completedBy: completedBy,
           createdBy: reminder.createdBy,
-          familyId: reminder.familyId
+          familyId: reminder.familyId,
+          isTest: reminder.title.toLowerCase().includes('test')
         },
-        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
         sound: 'default' as const,
       };
 

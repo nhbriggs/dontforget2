@@ -28,4 +28,9 @@ export interface Reminder {
   lastSnoozedAt?: Date;
   completedAt?: Date;
   blocked?: boolean;
+  reminderLocation?: {
+    latitude: number;
+    longitude: number;
+    timestamp: Date;
+  };
 } 

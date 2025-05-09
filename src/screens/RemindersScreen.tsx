@@ -395,7 +395,7 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
     // Create a test reminder
     const testReminder: Reminder = {
       id: 'test-reminder-' + Date.now(),
-      title: 'Test Notification',
+      title: 'Test Completion Notification',
       status: 'completed',
       createdAt: new Date(),
       dueDate: new Date(),
@@ -410,6 +410,45 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
 
     // Send the completion notification
     await NotificationService.sendCompletionNotification(testReminder, familyMembers[0].id);
+  };
+
+  const testReminderNotification = async () => {
+    if (!user) return;
+    
+    // Create a test reminder that's due in 1 minute
+    const dueDate = new Date();
+    dueDate.setMinutes(dueDate.getMinutes() + 1);
+    
+    const testReminder: Reminder = {
+      id: 'test-reminder-' + Date.now(),
+      title: 'Test Reminder',
+      status: 'pending',
+      createdAt: new Date(),
+      dueDate: dueDate,
+      assignedTo: user.id,
+      familyId: user.familyId!,
+      isRecurring: false,
+      recurrenceConfig: null,
+      checklist: [],
+      createdBy: user.id,
+      blocked: false,
+    };
+
+    // Schedule the reminder notification
+    const notificationId = await NotificationService.scheduleReminderNotification(testReminder);
+    if (notificationId) {
+      Alert.alert(
+        'Test Reminder Scheduled',
+        'A test reminder notification will appear in 1 minute.',
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Error',
+        'Failed to schedule test reminder. Please check notification permissions.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const onRefresh = React.useCallback(async () => {
@@ -428,14 +467,22 @@ export default function RemindersScreen({ navigation }: RemindersScreenProps) {
 
   return (
     <View style={styles.container}>
-      {user?.role === 'parent' && (
+      <View style={styles.testButtonsContainer}>
+        {user?.role === 'parent' && (
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={testCompletionNotification}
+          >
+            <Text style={styles.testButtonText}>Test Completion Notification</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.testButton}
-          onPress={testCompletionNotification}
+          onPress={testReminderNotification}
         >
-          <Text style={styles.testButtonText}>Test Completion Notification</Text>
+          <Text style={styles.testButtonText}>Test Reminder (1 min)</Text>
         </TouchableOpacity>
-      )}
+      </View>
       <View style={styles.topSection}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reminders</Text>
@@ -911,16 +958,23 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
+  testButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 8,
+    gap: 8,
+  },
   testButton: {
     backgroundColor: '#007AFF',
-    padding: 10,
+    padding: 8,
     borderRadius: 8,
-    margin: 10,
+    minWidth: 120,
     alignItems: 'center',
   },
   testButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   completedButton: {
     flexDirection: 'row',

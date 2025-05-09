@@ -25,10 +25,16 @@ export const auth = firebase.auth();
 // Initialize Firestore
 export const db = firebase.firestore();
 
-// Initialize Analytics
-let analytics = null;
-if (firebase.analytics.isSupported()) {
-  analytics = firebase.analytics();
-}
+// Initialize Analytics if supported
+const initAnalytics = async () => {
+  try {
+    const isSupported = await firebase.analytics.isSupported();
+    if (isSupported) {
+      firebase.analytics();
+    }
+  } catch (error) {
+    console.log('Analytics not supported:', error);
+  }
+};
 
-export { analytics }; 
+initAnalytics(); 

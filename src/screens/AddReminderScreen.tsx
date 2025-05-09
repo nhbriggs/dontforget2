@@ -371,6 +371,90 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
     }
   };
 
+  const renderDateTimePicker = () => {
+    if (Platform.OS === 'web') {
+      return (
+        <View style={styles.webDateTimeContainer}>
+          <View style={styles.webDateContainer}>
+            <input
+              type="date"
+              value={dueDate.toISOString().split('T')[0]}
+              onChange={(e) => {
+                const [year, month, day] = e.target.value.split('-').map(Number);
+                const newDate = new Date(dueDate);
+                newDate.setFullYear(year, month - 1, day);
+                setDueDate(newDate);
+                if (isRecurring) {
+                  const selectedDay = newDate.getDay().toString();
+                  setSelectedDays([selectedDay]);
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                borderWidth: 1,
+                borderColor: '#ddd',
+                borderRadius: 8,
+                fontSize: 16,
+                marginBottom: 8,
+              }}
+            />
+          </View>
+          <View style={styles.webTimeContainer}>
+            <input
+              type="time"
+              value={dueDate.toTimeString().slice(0, 5)}
+              onChange={(e) => {
+                const [hours, minutes] = e.target.value.split(':').map(Number);
+                const newDate = new Date(dueDate);
+                newDate.setHours(hours, minutes);
+                setDueDate(newDate);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                borderWidth: 1,
+                borderColor: '#ddd',
+                borderRadius: 8,
+                fontSize: 16,
+              }}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        <TouchableOpacity
+          onPress={() => setShowDatePicker(true)}
+          style={styles.dateButton}
+        >
+          <Text style={styles.dateButtonText}>
+            {formatFullDate(dueDate)}
+          </Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={dueDate}
+            mode="datetime"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(Platform.OS === 'ios');
+              if (selectedDate) {
+                setDueDate(selectedDate);
+                if (isRecurring) {
+                  const selectedDay = selectedDate.getDay().toString();
+                  setSelectedDays([selectedDay]);
+                }
+              }
+            }}
+          />
+        )}
+      </>
+    );
+  };
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -466,32 +550,7 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
         </View>
 
         <Text style={styles.label}>Due Date</Text>
-        <TouchableOpacity
-          onPress={() => setShowDatePicker(true)}
-          style={styles.dateButton}
-        >
-          <Text style={styles.dateButtonText}>
-            {formatFullDate(dueDate)}
-          </Text>
-        </TouchableOpacity>
-        {showDatePicker && (
-          <DateTimePicker
-            value={dueDate}
-            mode="datetime"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(Platform.OS === 'ios');
-              if (selectedDate) {
-                setDueDate(selectedDate);
-                // If recurring is enabled, update the selected day based on the chosen date
-                if (isRecurring) {
-                  const selectedDay = selectedDate.getDay().toString();
-                  setSelectedDays([selectedDay]);
-                }
-              }
-            }}
-          />
-        )}
+        {renderDateTimePicker()}
 
         <View style={styles.recurrenceSection}>
           <View style={styles.recurrenceHeader}>
@@ -849,5 +908,16 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#666',
+  },
+  webDateTimeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  webDateContainer: {
+    flex: 2,
+  },
+  webTimeContainer: {
+    flex: 1,
   },
 }); 
