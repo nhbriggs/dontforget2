@@ -1,14 +1,17 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { Reminder } from '../types/Reminder';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getAuth } from 'firebase/auth';
 import LocationService from './LocationService';
 
 // Queue for reminder due notifications
 let isNotificationHandlerSet = false;
+
+// In-memory map to store pre-reminder notification IDs by reminder ID
+const preReminderNotificationMap: Map<string, string[]> = new Map();
 
 const setupNotificationHandler = () => {
   if (isNotificationHandlerSet) {
@@ -92,6 +95,12 @@ const setupNotificationHandler = () => {
         if (userRole === 'parent' && notificationType !== 'completion') {
           console.log('❌ Parent user, blocking due notification');
           return blockNotification;
+        }
+
+        // If this is a due reminder, capture location
+        const reminderId = notification.request.content.data?.reminderId;
+        if (notification.request.content.data?.type === 'due' && typeof reminderId === 'string') {
+          await LocationService.captureAndStoreLocation(reminderId);
         }
 
         // Only if we pass all checks, then proceed with showing the notification
@@ -283,6 +292,8 @@ class NotificationService {
           isTest: reminder.title.toLowerCase().includes('test')
         },
         sound: 'default' as const,
+        interruptionLevel: 'timeSensitive' as const,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
       };
 
       // Add to due reminder queue
@@ -305,13 +316,36 @@ class NotificationService {
       });
       console.log('🔔 Notification scheduled with ID:', notificationId);
 
-      // Start location tracking when the reminder is due
-      if (creatorRole === 'parent') {
-        // For parent-created reminders, start location tracking
-        setTimeout(() => {
-          LocationService.startLocationTracking(reminder.id);
-        }, dueDate.getTime() - now.getTime());
+      // Schedule pre-reminder notifications (3, 2, 1 min before due)
+      const preReminderOffsets = [3, 2, 1]; // minutes before due time
+      const preReminderNotificationIds: string[] = [];
+      for (const offset of preReminderOffsets) {
+        const preReminderTime = new Date(dueDate.getTime() - offset * 60 * 1000);
+        const notificationId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Set your location for your upcoming reminder!",
+            body: `Tap to set your location for \"${reminder.title}\"`,
+            data: {
+              reminderId: reminder.id,
+              type: 'pre-location',
+              preReminderOffset: offset,
+            },
+            sound: 'default' as const,
+            interruptionLevel: 'timeSensitive' as const,
+            priority: Notifications.AndroidNotificationPriority.HIGH,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE as const,
+            date: preReminderTime,
+          },
+        });
+        if (typeof notificationId === 'string') {
+          preReminderNotificationIds.push(notificationId);
+        }
       }
+      // Store the notification IDs in Firestore
+      const reminderRef = doc(db, 'reminders', reminder.id);
+      await updateDoc(reminderRef, { preReminderNotificationIds });
 
       return notificationId;
     } catch (error) {
@@ -396,6 +430,7 @@ class NotificationService {
         },
         priority: Notifications.AndroidNotificationPriority.HIGH,
         sound: 'default' as const,
+        interruptionLevel: 'timeSensitive' as const,
       };
 
       // Add to completion queue
@@ -461,5 +496,54 @@ class NotificationService {
     }
   }
 }
+
+// Helper to cancel all pre-location notifications for a reminder using Firestore
+async function cancelAllPreLocationNotifications(reminderId: string) {
+  const reminderRef = doc(db, 'reminders', reminderId);
+  const reminderDoc = await getDoc(reminderRef);
+  if (reminderDoc.exists()) {
+    const data = reminderDoc.data();
+    const ids: string[] = data.preReminderNotificationIds || [];
+    for (const id of ids) {
+      await Notifications.cancelScheduledNotificationAsync(id);
+    }
+    // Remove the IDs from Firestore
+    await updateDoc(reminderRef, { preReminderNotificationIds: [] });
+  }
+}
+
+// Add this logic in the notification response handler
+Notifications.addNotificationResponseReceivedListener(async (response) => {
+  const data = response.notification.request.content.data;
+  const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
+
+  if (data?.type === 'pre-location' && reminderId) {
+    Alert.alert(
+      'Set Location',
+      'Would you like to set your location for this reminder now?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Set Location',
+          onPress: async () => {
+            await LocationService.captureAndStoreLocation(reminderId);
+            await cancelAllPreLocationNotifications(reminderId);
+            Alert.alert('Location Set', 'Your location has been saved for this reminder.');
+          },
+        },
+      ]
+    );
+    return;
+  }
+
+  // Only navigate for regular due/completion notifications
+  if (reminderId && (data?.type === 'due' || data?.type === 'completion')) {
+    // ...existing navigation logic for Complete Reminder screen...
+    // (This part should remain as it was before)
+  }
+});
 
 export default NotificationService; 

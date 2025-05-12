@@ -33,4 +33,5 @@ export interface Reminder {
     longitude: number;
     timestamp: Date;
   };
+  notifyParentOnGeofenceBreach?: boolean;
 } 

@@ -15,6 +15,11 @@ export type RootStackParamList = {
       selectedDays: string[];
       weekFrequency: number;
     };
+    reminderLocation?: {
+      latitude: number;
+      longitude: number;
+      timestamp: Date;
+    };
   };
   EditReminder: {
     reminderId: string;
@@ -28,6 +33,7 @@ export type RootStackParamList = {
   JoinFamily: undefined;
   CreateParentAccount: undefined;
   Settings: undefined;
+  SetLocation: { reminderId: string; onLocationSet?: (location: { latitude: number; longitude: number; timestamp: Date }) => void };
 };
 
 export type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;

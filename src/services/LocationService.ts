@@ -135,6 +135,30 @@ class LocationService {
     this.reminderLocations.delete(reminderId);
     console.log('Location tracking stopped for reminder:', reminderId);
   }
+
+  static async captureAndStoreLocation(reminderId: string) {
+    try {
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) return;
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      // Store the reminder location in Firestore
+      const reminderRef = doc(db, 'reminders', reminderId);
+      await updateDoc(reminderRef, {
+        reminderLocation: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          timestamp: new Date(),
+        },
+      });
+      console.log('📍 Location captured and stored for reminder:', reminderId);
+    } catch (error) {
+      console.error('Error capturing location:', error);
+    }
+  }
 }
 
 export default LocationService; 

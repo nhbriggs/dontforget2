@@ -114,6 +114,8 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [weekFrequency, setWeekFrequency] = useState('1');
+  const [reminderLocation, setReminderLocation] = useState<{ latitude: number; longitude: number; timestamp: Date } | null>(null);
+  const [notifyParentOnGeofenceBreach, setNotifyParentOnGeofenceBreach] = useState(true);
 
   useEffect(() => {
     const loadReminder = async () => {
@@ -141,6 +143,12 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
           if (reminderData.recurrenceConfig) {
             setSelectedDays(reminderData.recurrenceConfig.selectedDays);
             setWeekFrequency(reminderData.recurrenceConfig.weekFrequency.toString());
+          }
+          if (reminderData.reminderLocation) {
+            setReminderLocation(reminderData.reminderLocation);
+          }
+          if (typeof reminderData.notifyParentOnGeofenceBreach === 'boolean') {
+            setNotifyParentOnGeofenceBreach(reminderData.notifyParentOnGeofenceBreach);
           }
         }
         setLoading(false);
@@ -277,6 +285,8 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
           lastGenerated: new Date(),
         } : null,
         updatedAt: new Date(),
+        ...(reminderLocation && { reminderLocation }),
+        ...(user?.role === 'parent' && reminderLocation ? { notifyParentOnGeofenceBreach } : {}),
       };
       
       await updateDoc(reminderRef, updatedData);
@@ -418,6 +428,19 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
                   {`Every ${weekFrequency} week(s) on ${selectedDays
                     .map((day) => WEEKDAYS.find(d => d.id === day)?.name)
                     .join(', ')}`}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {reminder && reminder.reminderLocation && (
+            <View style={styles.readOnlyRow}>
+              <MaterialCommunityIcons name="map-marker" size={24} color="#666" style={styles.readOnlyIcon} />
+              <View>
+                <Text style={styles.readOnlyLabel}>Location</Text>
+                <Text style={styles.readOnlyText}>
+                  Lat: {reminder.reminderLocation.latitude.toFixed(6)}{"\n"}
+                  Long: {reminder.reminderLocation.longitude.toFixed(6)}
                 </Text>
               </View>
             </View>
@@ -661,6 +684,46 @@ const EditReminderScreen: React.FC<EditReminderScreenProps> = ({ route, navigati
 
         <Text style={styles.label}>Due Date</Text>
         {renderDateTimePicker()}
+
+        <Text style={styles.label}>Location</Text>
+        <View style={styles.locationContainer}>
+          {reminderLocation ? (
+            <View style={styles.locationInfo}>
+              <Text style={styles.locationText}>
+                Location Set:{'\n'}
+                Lat: {reminderLocation.latitude.toFixed(6)}{'\n'}
+                Long: {reminderLocation.longitude.toFixed(6)}
+              </Text>
+              <TouchableOpacity
+                style={styles.changeLocationButton}
+                onPress={() => navigation.navigate('SetLocation', { reminderId })}
+              >
+                <Text style={styles.changeLocationButtonText}>Change Location</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.setLocationButton}
+              onPress={() => navigation.navigate('SetLocation', { reminderId })}
+            >
+              <Text style={styles.setLocationButtonText}>Set Location</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {user?.role === 'parent' && reminderLocation && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Switch
+              value={notifyParentOnGeofenceBreach}
+              onValueChange={setNotifyParentOnGeofenceBreach}
+              trackColor={{ false: '#767577', true: '#81b0ff' }}
+              thumbColor={notifyParentOnGeofenceBreach ? '#007AFF' : '#f4f3f4'}
+            />
+            <Text style={{ marginLeft: 10, color: '#333', fontSize: 14, flex: 1 }}>
+              Notify parents if the reminder is not completed and the device leaves this location
+            </Text>
+          </View>
+        )}
 
         <View style={styles.recurrenceSection}>
           <View style={styles.recurrenceHeader}>
@@ -1117,6 +1180,46 @@ const styles = StyleSheet.create({
   },
   webTimeContainer: {
     flex: 1,
+  },
+  locationContainer: {
+    marginBottom: 16,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  setLocationButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  setLocationButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  changeLocationButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 8,
+    borderRadius: 6,
+    marginLeft: 12,
+  },
+  changeLocationButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

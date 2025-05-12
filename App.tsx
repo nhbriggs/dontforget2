@@ -13,6 +13,7 @@ import ManageFamilyScreen from './src/screens/ManageFamilyScreen';
 import JoinFamilyScreen from './src/screens/JoinFamilyScreen';
 import CreateParentAccountScreen from './src/screens/CreateParentAccountScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import SetLocationScreen from './src/screens/SetLocationScreen';
 import { RootStackParamList } from './src/types/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -71,18 +72,14 @@ function Navigation() {
 
       // Set up notification listeners
       const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+        const data = notification.request.content.data;
         const notificationId = notification.request.identifier;
-        
-        // Check if we've already handled this notification
-        if (handledNotifications.current.has(notificationId)) {
-          console.log('\n🚫 ========= DUPLICATE ALERT PREVENTED =========');
-          console.log('📝 Notification ID:', notificationId);
-          console.log('==========================================\n');
+        const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
+
+        // Only show alert for due/completion notifications
+        if (data?.type !== 'due' && data?.type !== 'completion') {
           return;
         }
-
-        // Add to handled set
-        handledNotifications.current.add(notificationId);
 
         const now = new Date();
         console.log('\n🔔 ========= NOTIFICATION RECEIVED =========');
@@ -92,10 +89,6 @@ function Navigation() {
         console.log('🏷️ Title:', notification.request.content.title);
         console.log('📅 Trigger:', notification.request.trigger);
         console.log('==========================================\n');
-        
-        // Get the reminder ID from the notification data
-        const reminderId = notification.request.content.data?.reminderId;
-        
         // Log attempt to show Alert
         console.log('\n🚨 ========= SHOWING ALERT =========');
         console.log('⏰ Time:', new Date().toLocaleTimeString());
@@ -134,14 +127,12 @@ function Navigation() {
                 console.log('⏰ Time:', snoozeTime.toLocaleTimeString());
                 console.log('📝 Original Notification ID:', notificationId);
                 console.log('📌 Reminder ID:', reminderId);
-                
                 // Clear the current notification
                 try {
                   await Notifications.dismissNotificationAsync(notificationId);
                 } catch (error) {
                   console.log('⚠️ Could not dismiss notification:', error);
                 }
-
                 if (reminderId) {
                   try {
                     // Update snooze count in Firestore
@@ -155,7 +146,6 @@ function Navigation() {
                     console.error('❌ Error updating snooze count:', error);
                   }
                 }
-
                 // Cancel any scheduled instance of this notification
                 try {
                   await Notifications.cancelScheduledNotificationAsync(notificationId);
@@ -163,7 +153,6 @@ function Navigation() {
                 } catch (error) {
                   console.log('⚠️ Could not cancel notification (might already be expired):', error);
                 }
-
                 // Schedule a new notification 1 minute from now
                 try {
                   const newNotificationId = await Notifications.scheduleNotificationAsync({
@@ -200,105 +189,18 @@ function Navigation() {
         console.log('📌 Reminder ID:', response.notification.request.content.data?.reminderId);
         console.log('==========================================\n');
 
-        // Get the reminder ID and check if it's a completion notification
-        const reminderId = response.notification.request.content.data?.reminderId;
-        const isCompletionNotification = 
-          response.notification.request.content.data?.type === 'completion' ||
-          response.notification.request.content.title?.includes('Completed!');
+        const data = response.notification.request.content.data;
+        const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
 
-        if (reminderId) {
-          if (isCompletionNotification) {
-            // For completion notifications, navigate directly to the completed reminder
-            // @ts-ignore - navigation type is correct but TypeScript doesn't recognize it
-            navigation.navigate('CompleteReminder', { reminderId });
-          } else {
-            // For regular reminders, show the alert with options
-            Alert.alert(
-              response.notification.request.content.title || 'Reminder',
-              response.notification.request.content.body || 'Time for your task!',
-              [
-                { 
-                  text: 'OK', 
-                  style: 'default',
-                  onPress: async () => {
-                    // Clear this notification when OK is pressed
-                    try {
-                      await Notifications.dismissNotificationAsync(response.notification.request.identifier);
-                    } catch (error) {
-                      console.log('⚠️ Could not dismiss notification:', error);
-                    }
-                    // Navigate to complete reminder screen
-                    // @ts-ignore - navigation type is correct but TypeScript doesn't recognize it
-                    navigation.navigate('CompleteReminder', { reminderId });
-                  }
-                },
-                {
-                  text: 'Snooze (1min)',
-                  style: 'default',
-                  onPress: async () => {
-                    const snoozeTime = new Date();
-                    console.log('\n⏰ ========= SNOOZE PRESSED =========');
-                    console.log('⏰ Time:', snoozeTime.toLocaleTimeString());
-                    console.log('📝 Original Notification ID:', response.notification.request.identifier);
-                    console.log('📌 Reminder ID:', reminderId);
-                    
-                    // Clear the current notification
-                    try {
-                      await Notifications.dismissNotificationAsync(response.notification.request.identifier);
-                    } catch (error) {
-                      console.log('⚠️ Could not dismiss notification:', error);
-                    }
+        if (data?.type === 'pre-location' && reminderId) {
+          // Navigate to SetLocationScreen
+          navigation.navigate('SetLocation', { reminderId });
+          return;
+        }
 
-                    if (reminderId) {
-                      try {
-                        // Update snooze count in Firestore
-                        const reminderRef = doc(db, 'reminders', reminderId as string);
-                        await updateDoc(reminderRef, {
-                          snoozeCount: increment(1),
-                          lastSnoozedAt: new Date()
-                        });
-                        console.log('📊 Updated snooze count for reminder:', reminderId);
-                      } catch (error) {
-                        console.error('❌ Error updating snooze count:', error);
-                      }
-                    }
-
-                    // Cancel any scheduled instance of this notification
-                    try {
-                      await Notifications.cancelScheduledNotificationAsync(response.notification.request.identifier);
-                      console.log('🗑️ Cancelled original notification:', response.notification.request.identifier);
-                    } catch (error) {
-                      console.log('⚠️ Could not cancel notification (might already be expired):', error);
-                    }
-
-                    // Schedule a new notification 1 minute from now
-                    try {
-                      const newNotificationId = await Notifications.scheduleNotificationAsync({
-                        content: {
-                          title: response.notification.request.content.title || 'Reminder',
-                          body: response.notification.request.content.body || 'Time for your task!',
-                          data: {
-                            ...response.notification.request.content.data,
-                            isSnoozed: true  // Mark this as a snoozed notification
-                          },
-                        },
-                        trigger: {
-                          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-                          seconds: 60, // 1 minute
-                        },
-                      });
-                      console.log('🆕 New snoozed notification scheduled with ID:', newNotificationId);
-                      console.log('⏰ Will trigger at:', new Date(Date.now() + 60000).toLocaleTimeString());
-                      console.log('==========================================\n');
-                    } catch (error) {
-                      console.error('❌ Error scheduling new notification:', error);
-                    }
-                  },
-                },
-              ],
-              { cancelable: false }
-            );
-          }
+        // Only navigate to CompleteReminder for due/completion
+        if (reminderId && (data?.type === 'due' || data?.type === 'completion')) {
+          navigation.navigate('CompleteReminder', { reminderId });
         }
       });
 
@@ -487,6 +389,19 @@ function Navigation() {
                   />
                 </View>
               ),
+            }}
+          />
+          <Stack.Screen
+            name="SetLocation"
+            component={SetLocationScreen}
+            options={{
+              title: 'Set Location',
+              headerStyle: {
+                backgroundColor: '#fff',
+              },
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
             }}
           />
         </>

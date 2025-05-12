@@ -16,6 +16,17 @@ import { CompleteReminderScreenProps } from '../types/navigation';
 import NotificationService from '../services/NotificationService';
 import { useAuth } from '../contexts/AuthContext';
 import * as Location from 'expo-location';
+import LocationService from '../services/LocationService';
+
+// Helper to format Firestore Timestamp or Date
+function formatTimestamp(ts: any): string {
+  if (!ts) return 'Date not available';
+  if (typeof ts === 'object' && typeof ts.toDate === 'function') {
+    return ts.toDate().toLocaleString();
+  }
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? 'Date not available' : d.toLocaleString();
+}
 
 export default function CompleteReminderScreen({ route, navigation }: CompleteReminderScreenProps) {
   const { reminderId } = route.params;
@@ -57,6 +68,14 @@ export default function CompleteReminderScreen({ route, navigation }: CompleteRe
         setChecklist(data.checklist || []);
         if (data.reminderLocation) {
           setReminderLocation(data.reminderLocation);
+        } else {
+          // Fallback: If reminderLocation is missing, try to capture and store it now
+          await LocationService.captureAndStoreLocation(reminderId);
+          // Reload the reminder to get the new location
+          const updatedDoc = await getDoc(doc(db, 'reminders', reminderId));
+          if (updatedDoc.exists() && updatedDoc.data().reminderLocation) {
+            setReminderLocation(updatedDoc.data().reminderLocation);
+          }
         }
       }
       setLoading(false);
@@ -176,7 +195,7 @@ export default function CompleteReminderScreen({ route, navigation }: CompleteRe
                 Reminder Location: {'\n'}
                 Lat: {reminderLocation.latitude.toFixed(6)}{'\n'}
                 Long: {reminderLocation.longitude.toFixed(6)}{'\n'}
-                Set at: {new Date(reminderLocation.timestamp).toLocaleString()}
+                Set at: {formatTimestamp(reminderLocation.timestamp)}
               </Text>
             </View>
           )}

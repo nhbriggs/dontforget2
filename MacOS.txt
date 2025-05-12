@@ -1,0 +1,52 @@
+# MacOS Native iOS Development Guide
+
+## Project Context & Status
+- This project started as an Expo Managed (Expo Go) app for family reminders.
+- We implemented time-based and pre-location notifications, and experimented with capturing device location when reminders fire.
+- Expo Managed workflow cannot reliably capture location in the background or when the app is terminated.
+- We have now ejected to Expo Bare workflow to enable native iOS (and Android) code for advanced background features.
+- All code and changes are tracked in a dedicated GitHub branch, so you can always roll back if needed.
+
+## Goal
+- **Enable the app to automatically capture and save the device's location when a reminder is due, even if the app is in the background or terminated.**
+- (Future) Allow users to set a geofence when creating a reminder, so the app can trigger actions when entering/exiting a location.
+
+## What Has Been Done
+- Expo Bare eject completed; native iOS/Android folders are present.
+- Reminder scheduling, notification logic, and Firestore integration are working in JS/TS.
+- Pre-location notifications and location capture work when the app is foregrounded, but not in the background/terminated state.
+- MacOS.txt created to document the next steps for native iOS work.
+
+## Next Steps (Native iOS)
+1. **Project Setup**
+   - Ensure your latest branch is pushed to GitHub from your PC.
+   - On your Mac, clone or pull the latest branch.
+   - Open the project in Xcode: `ios/YourApp.xcworkspace`.
+2. **Initial Native Build**
+   - Run the app on a simulator or real device to confirm the bare workflow works.
+   - Fix any build issues that may arise after ejecting.
+3. **Enable Background Modes**
+   - In Xcode, select your project > Signing & Capabilities.
+   - Add the following Background Modes:
+     - Location updates
+     - Background fetch
+     - Remote notifications (if needed)
+4. **Implement Background Location Logic**
+   - Use the BackgroundTasks framework (`BGAppRefreshTask`) to schedule background tasks near reminder times.
+   - Use `CLLocationManager` to request a one-time location update in the background task.
+   - Save the location to your reminder data model (local DB or Firestore).
+5. **(Optional) Set Up Geofencing**
+   - When creating a reminder, allow the user to pin a location.
+   - Use `CLLocationManager` to set a geofence for that location.
+   - Handle geofence entry/exit events to trigger location capture or notifications.
+6. **Testing**
+   - Test on a real device (background/terminated states).
+   - Use Xcode logs and breakpoints to debug background task execution.
+
+## References
+- Apple Docs: BackgroundTasks: https://developer.apple.com/documentation/backgroundtasks
+- Apple Docs: CLLocationManager & Geofencing: https://developer.apple.com/documentation/corelocation/monitoring_the_user_s_proximity_to_geographic_regions
+
+---
+
+**When you return to your Mac, open this file and continue from here!** 

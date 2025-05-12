@@ -108,6 +108,8 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
   const [selectedDays, setSelectedDays] = useState<string[]>(cloneData?.selectedDays || []);
   const [weekFrequency, setWeekFrequency] = useState(cloneData?.weekFrequency?.toString() || '1');
   const [loading, setLoading] = useState(false);
+  const [reminderLocation, setReminderLocation] = useState<{ latitude: number; longitude: number; timestamp: Date } | null>(null);
+  const [notifyParentOnGeofenceBreach, setNotifyParentOnGeofenceBreach] = useState(true);
 
   useEffect(() => {
     const initializeFamily = async () => {
@@ -171,6 +173,14 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
       setWeekFrequency(weekFrequency?.toString() || '1');
     }
   }, [route.params?.cloneData]);
+
+  useEffect(() => {
+    if (route.params?.reminderLocation) {
+      setReminderLocation(route.params.reminderLocation);
+      // Optionally clear the param so it doesn't trigger again
+      navigation.setParams({ reminderLocation: undefined });
+    }
+  }, [route.params?.reminderLocation]);
 
   const loadFamilyMembers = async () => {
     console.log('DEBUG: Starting loadFamilyMembers function');
@@ -288,46 +298,16 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
       return;
     }
 
-    if (!user?.familyId) {
-      Alert.alert('Error', 'No family associated with this account');
-      return;
-    }
-
     try {
       setLoading(true);
-
-      // Check family subscription status
-      const familyRef = doc(db, 'families', user.familyId);
-      const familyDoc = await getDoc(familyRef);
-      const familyData = familyDoc.data();
-
-      if (!familyData) {
-        Alert.alert('Error', 'Family not found');
-        return;
-      }
-
-      // Check if family is on free plan and already has a reminder
-      if (familyData.subscription?.type === 'free') {
-        const remindersQuery = query(
-          collection(db, 'reminders'),
-          where('familyId', '==', user.familyId)
-        );
-        const remindersSnapshot = await getDocs(remindersQuery);
-        
-        if (remindersSnapshot.size >= 1) {
-          console.log('DEBUG: Free plan limit hit, reminders count:', remindersSnapshot.size);
-          window.alert('You have reached the limit of 1 reminder on the free plan. To create more reminders, please upgrade your plan in the Settings screen.');
-          setLoading(false);
-          return;
-        }
-      }
-
+      
+      // Create the reminder data
       const reminderData = {
         title: title.trim(),
         checklist,
         assignedTo,
-        familyId: user.familyId,
-        createdBy: user.id,
+        familyId: user?.familyId || '',
+        createdBy: user?.id || '',
         createdAt: new Date(),
         dueDate,
         status: 'pending' as const,
@@ -338,29 +318,21 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
           startDate: dueDate,
           lastGenerated: new Date(),
         } : null,
-        snoozeCount: 0,
+        ...(reminderLocation && { reminderLocation }),
+        ...(user?.role === 'parent' && reminderLocation ? { notifyParentOnGeofenceBreach } : {}),
       };
 
       // Add the reminder to Firestore
       const docRef = await addDoc(collection(db, 'reminders'), reminderData);
-      console.log('📝 Created reminder with ID:', docRef.id);
-      console.log('📅 Reminder data:', reminderData);
+      console.log('📝 Created new reminder:', docRef.id);
 
-      // Schedule the notification
-      if (docRef.id && user?.familyId) {
-        console.log('🔔 Attempting to schedule notification for reminder:', docRef.id);
-        const notificationId = await NotificationService.scheduleReminderNotification({
-          ...reminderData,
-          id: docRef.id,
-          familyId: user.familyId,
-          createdBy: user.id || '',
-        });
-        console.log('📱 Notification scheduling result:', notificationId);
-        
-        // Check all scheduled notifications
-        const scheduledNotifications = await NotificationService.checkScheduledNotifications();
-        console.log('📋 All scheduled notifications after adding:', scheduledNotifications);
-      }
+      // Schedule notification
+      console.log('🔔 Scheduling notification for new reminder');
+      const notificationId = await NotificationService.scheduleReminderNotification({
+        ...reminderData,
+        id: docRef.id,
+      });
+      console.log('📱 Notification scheduled with ID:', notificationId);
 
       navigation.goBack();
     } catch (error) {
@@ -551,6 +523,58 @@ export default function AddReminderScreen({ navigation, route }: AddReminderScre
 
         <Text style={styles.label}>Due Date</Text>
         {renderDateTimePicker()}
+
+        <Text style={styles.label}>Location</Text>
+        <View style={styles.locationContainer}>
+          {reminderLocation ? (
+            <View style={styles.locationInfo}>
+              <Text style={styles.locationText}>
+                Location Set:{'\n'}
+                Lat: {reminderLocation.latitude.toFixed(6)}{'\n'}
+                Long: {reminderLocation.longitude.toFixed(6)}
+              </Text>
+              <TouchableOpacity
+                style={styles.changeLocationButton}
+                onPress={() => navigation.navigate('SetLocation', {
+                  reminderId: 'new',
+                  onLocationSet: (locationData: { latitude: number; longitude: number; timestamp: Date }) => {
+                    setReminderLocation(locationData);
+                  },
+                })}
+              >
+                <Text style={styles.changeLocationButtonText}>Change Location</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.setLocationButton}
+              onPress={() => navigation.navigate('SetLocation', {
+                reminderId: 'new',
+                onLocationSet: (locationData: { latitude: number; longitude: number; timestamp: Date }) => {
+                  setReminderLocation(locationData);
+                },
+              })}
+            >
+              <Text style={styles.setLocationButtonText}>Set Location</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>
+          Tip: If you set a location, the app will send an immediate notification if the reminder hasn't been completed and the device leaves this location.
+        </Text>
+        {user?.role === 'parent' && reminderLocation && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Switch
+              value={notifyParentOnGeofenceBreach}
+              onValueChange={setNotifyParentOnGeofenceBreach}
+              trackColor={{ false: '#767577', true: '#81b0ff' }}
+              thumbColor={notifyParentOnGeofenceBreach ? '#007AFF' : '#f4f3f4'}
+            />
+            <Text style={{ marginLeft: 10, color: '#333', fontSize: 14, flex: 1 }}>
+              Notify parents if the reminder is not completed and the device leaves this location
+            </Text>
+          </View>
+        )}
 
         <View style={styles.recurrenceSection}>
           <View style={styles.recurrenceHeader}>
@@ -919,5 +943,45 @@ const styles = StyleSheet.create({
   },
   webTimeContainer: {
     flex: 1,
+  },
+  locationContainer: {
+    marginBottom: 16,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  setLocationButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  setLocationButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  changeLocationButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 8,
+    borderRadius: 6,
+    marginLeft: 12,
+  },
+  changeLocationButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 }); 

@@ -1,0 +1,14 @@
+# RoadMap
+
+- [x] Store pre-reminder notification IDs in Firestore for robust cross-device support (e.g., so notifications can be cancelled from any device or after a reinstall). This will help with managing and cancelling scheduled notifications reliably in the future.
+- [ ] Allow parent/child to define the location upon setting up the reminder (feature to be designed/implemented).
+- [ ] Add video and AI functionality on completing reminders
+- [ ] Implement PIN code authentication option as an alternative to sign-in for quick app access
+- [ ] Allow parents to opt in or out of receiving geofence breach notifications for reminders they create
+    - If a location is set, the child always receives the notification
+    - Add a toggle for parents in the reminder creation screen
+    - Store the preference in the reminder document (e.g., notifyParentOnGeofenceBreach: boolean)
+    - When a geofence breach is detected, notify the parent if opted in
+- [ ] Show a small location map (with pin) on the reminder list screen, to the left of the reminder fields, if a location is set for the reminder
+
+// Add more roadmap items below as needed... 
