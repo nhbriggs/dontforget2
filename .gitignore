@@ -31,4 +31,16 @@ yarn-error.*
 *.pem
 
 # typescript
-*.tsbuildinfo 
+*.tsbuildinfo
+
+# iOS
+ios/Pods/
+ios/*.xcodeproj/*
+!ios/*.xcodeproj/project.pbxproj
+!ios/*.xcodeproj/xcshareddata/
+!ios/*.xcworkspace/contents.xcworkspacedata
+**/ios/.xcode.env.local
+ios/build/
+
+# Firebase config
+GoogleService-Info.plist 
